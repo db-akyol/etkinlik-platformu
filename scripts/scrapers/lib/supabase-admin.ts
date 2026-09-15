@@ -14,8 +14,27 @@
  * service role key must stay server/CI-only (see `.env.local`, and
  * `secrets.SUPABASE_SERVICE_ROLE_KEY` in .github/workflows/scrape.yml).
  */
-import "dotenv/config";
+// `dotenv/config`'s default only loads a file literally named `.env` — this
+// project follows Next.js's convention of `.env.local` (see .env.example),
+// so it has to be pointed there explicitly or every env var silently reads
+// as undefined outside of Next's own dev/build process.
+import { config as loadDotenv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import NodeWebSocket from "ws";
+
+loadDotenv({ path: ".env.local" });
+
+// @supabase/supabase-js's realtime client expects a global `WebSocket`
+// (native since Node 22) even though these scripts never subscribe to
+// anything — its mere construction throws on this project's Node 20
+// otherwise. `ws` is a standard, widely-used polyfill for exactly this.
+if (typeof globalThis.WebSocket === "undefined") {
+  // `ws`'s type doesn't perfectly match the DOM `WebSocket` type Supabase
+  // expects (it's still runtime-compatible for what the client actually
+  // uses) — narrow the cast to this one assignment rather than `any`-ing
+  // the whole module.
+  globalThis.WebSocket = NodeWebSocket as unknown as typeof globalThis.WebSocket;
+}
 import type { Database as RawDatabase } from "../../../lib/supabase/types";
 
 /**
