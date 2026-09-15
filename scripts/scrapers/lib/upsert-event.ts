@@ -20,41 +20,38 @@
  *     defeat the point of moderation — that source should force
  *     `status: "pending"` explicitly rather than reuse this default as-is.
  *
- * --- Dedup / ON CONFLICT caveat -------------------------------------------
+ * --- Dedup key: (title, start_at) only — NOT venue_id ---------------------
  *
- * `supabase/schema.sql` defines the dedup unique index as an EXPRESSION
- * index:
+ * The dedup key used to be (title, start_at, venue_id) via an expression
+ * index (`coalesce(venue_id, <sentinel>)`, to make null venue_ids collide
+ * instead of being treated as distinct). That caught duplicates WITHIN one
+ * source, but the same real event scraped from biletinial.com AND
+ * biletix.com kept landing as two rows, because each site spells the same
+ * venue's name slightly differently ("... Kültür ve Kongre Merkezi" vs
+ * "... KKM") — resolve-refs.ts's exact-match venue resolution then creates
+ * two different `venues` rows, i.e. two different venue_ids, for what is
+ * unambiguously the same event. Confirmed empirically: well over a dozen
+ * biletinial/biletix pairs matched exactly on title AND start_at (down to
+ * the second) and differed ONLY in venue_id. See
+ * supabase/migrations/0003_dedup_by_title_start_at.sql.
  *
- *   create unique index events_dedup_idx on events (
- *     title, start_at, coalesce(venue_id, '00000000-0000-0000-0000-000000000000')
- *   );
+ * Dropping venue_id from the key accepts a vanishingly small risk (two
+ * genuinely different events sharing both an exact title string and the
+ * exact same start timestamp, in the same city) in exchange for actually
+ * fixing those duplicate listings. It does NOT solve the harder problem of
+ * two sites wording the same event's TITLE differently (e.g. "Dedublüman"
+ * vs "Dedublüman Konseri") — that's real fuzzy matching, deliberately still
+ * out of scope; every source observed so far has used the same plain title
+ * text, so this hasn't come up in practice yet.
  *
- * Postgres's `ON CONFLICT (col1, col2, col3)` clause matches a conflict
- * target by the exact index DEFINITION, not by column name — so
- * `ON CONFLICT (title, start_at, venue_id)` (literal `venue_id`, no
- * `coalesce(...)`) does NOT match `events_dedup_idx` at all, even for rows
- * where `venue_id` happens to be non-null. PostgREST/Supabase's `.upsert()`
- * builds exactly that literal-column `ON CONFLICT` clause from the
- * `onConflict` option string, so it cannot target an expression index this
- * way — the database will reply with something like "there is no unique or
- * exclusion constraint matching the ON CONFLICT specification", i.e. it will
- * error on essentially every call rather than silently doing the wrong thing.
- *
- * We still attempt it first (in case a future schema migration adds a plain
- * matching index, or a newer PostgREST/Supabase version learns to target
- * expression indexes some other way — at that point this becomes a cheap,
- * atomic, race-free upsert and the code below just stops hitting the catch
- * branch). But the code MUST NOT rely on it succeeding. On failure we fall
- * back to the same three-field dedup key applied manually:
- * select-by-(title, start_at, venue_id) -> update if found, insert if not.
- *
- * This fallback is not perfectly atomic (a race between two concurrent
- * scraper runs could both pass the "not found" check and double-insert) —
- * acceptable for an MVP that runs a cron twice a day, not acceptable at
- * higher concurrency. If that ever matters, the real fix is a plain
- * (non-expression) unique index Supabase's upsert can target directly, e.g.
- * by adding a generated `venue_id_key` column that defaults to the sentinel
- * UUID instead of null.
+ * (title, start_at) is also now a plain, non-expression unique index, so a
+ * real atomic `ON CONFLICT` upsert is possible — but deliberately NOT used
+ * here: PostgREST's `.upsert()` would set every payload column (including
+ * `status`) on conflict, which would silently undo an admin's manual
+ * "reject" on the next re-scrape (see the comment below). The manual
+ * select-then-insert-or-update below trades a small amount of non-atomicity
+ * (acceptable for an MVP cron running twice a day, not at higher
+ * concurrency) for the ability to leave `status` alone on update.
  */
 import type { EventRow } from "../../../lib/supabase/types";
 import type { SupabaseAdminClient } from "./supabase-admin";
@@ -75,30 +72,15 @@ export async function upsertScrapedEvent(
     status: "approved",
   };
 
-  // --- Attempt 1: DB-level upsert (see file header for why this currently
-  // fails against events_dedup_idx, and why we try it anyway). ---
-  const { error: upsertError } = await supabase
-    .from("events")
-    .upsert(payload, { onConflict: "title,start_at,venue_id" });
-
-  if (!upsertError) {
-    return { action: "inserted" };
-  }
-
-  // --- Fallback: manual select-then-insert-or-update using the same three
-  // fields the expression index dedupes on. ---
-  let query = supabase
+  // Manual select-then-insert-or-update on the same (title, start_at) key
+  // events_dedup_idx dedupes on — see the file header for why this doesn't
+  // use a DB-level `.upsert()` despite a matching plain index now existing.
+  const { data: existing, error: selectError } = await supabase
     .from("events")
     .select("id")
     .eq("title", payload.title)
-    .eq("start_at", payload.start_at);
-
-  query =
-    payload.venue_id === null
-      ? query.is("venue_id", null)
-      : query.eq("venue_id", payload.venue_id);
-
-  const { data: existing, error: selectError } = await query.maybeSingle();
+    .eq("start_at", payload.start_at)
+    .maybeSingle();
 
   if (selectError) {
     return { action: "error", error: selectError };

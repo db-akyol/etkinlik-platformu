@@ -3,32 +3,47 @@
  * and trims. Applied to every title/venue/description a parser extracts so
  * that trivial formatting differences don't turn the same real-world event
  * into two DB rows — the dedup key in `upsert-event.ts` is an exact match on
- * `title` (+ `start_at` + `venue_id`), so inconsistent whitespace defeats it
- * silently. This does NOT solve cross-source dedup where two sites word the
- * same event's title differently (e.g. "Dedublüman" vs "Dedublüman Konseri")
- * — that's a harder fuzzy-matching problem, intentionally out of scope for
- * now (same tradeoff `resolve-refs.ts` documents for venue names); the admin
- * approval queue is the backstop for catching those by eye.
+ * `title` + `start_at` (see that file for why `venue_id` was dropped from
+ * it), so inconsistent whitespace defeats it silently. This does NOT solve
+ * cross-source dedup where two sites word the same event's title differently
+ * (e.g. "Dedublüman" vs "Dedublüman Konseri") — that's a harder
+ * fuzzy-matching problem, intentionally out of scope for now (no source
+ * observed so far actually does this — every cross-source duplicate found
+ * used the exact same title text). There is no longer an admin approval
+ * queue backstopping scraped events (see upsert-event.ts) — a title-wording
+ * mismatch that slipped through would go straight to the public site as a
+ * visible duplicate, not just a queue an admin happens to glance at.
  */
 export function normalizeText(input: string): string {
   return input.replace(/\s+/g, " ").trim();
 }
 
 /**
- * Parses a date-time string that has NO UTC offset (e.g. biletinial's
- * `SeanceDate: "2026-09-18T20:00:00"`) as Turkey local time and returns a
+ * Parses biletinial's `SeanceDate` field as Turkey local time and returns a
  * correct UTC ISO string.
  *
- * `new Date(input)` on a plain offset-less string is NOT safe for this: the
- * spec has JS treat it as local time IN WHATEVER TIMEZONE THE RUNTIME
- * HAPPENS TO BE IN, not Europe/Istanbul. On a Vercel/GitHub-Actions runner
- * (TZ=UTC) that silently stored the raw Turkey wall-clock digits as if they
- * were already UTC — every biletinial event ended up 3 hours off. Turkey
- * has used a fixed UTC+3 offset with no DST since 2016, so appending
- * "+03:00" before parsing is enough (no timezone-database lookup needed).
+ * `new Date(input)` on a plain offset-less string ("2026-09-18T20:00:00") is
+ * NOT safe for this: the spec has JS treat it as local time IN WHATEVER
+ * TIMEZONE THE RUNTIME HAPPENS TO BE IN, not Europe/Istanbul. On a
+ * Vercel/GitHub-Actions runner (TZ=UTC) that silently stored the raw Turkey
+ * wall-clock digits as if they were already UTC — every biletinial event
+ * ended up 3 hours off.
+ *
+ * biletinial's own API makes this messier than a single fixed offset: some
+ * `SeanceDate` values come back WITH a trailing "Z" (e.g.
+ * "2026-10-05T20:00:00Z") and some without, inconsistently, for what is
+ * still the same Turkey wall-clock time either way (confirmed against
+ * biletix's independently-sourced time for the same real event: biletinial
+ * dropped the "Z" one moment and added it the next, while the digits stayed
+ * "20:30" for a show biletix also recorded as 20:30 local — i.e. the "Z" is
+ * a formatting artifact of their backend, not a genuine UTC marker). So:
+ * strip any offset/Z biletinial happened to attach and always (re-)apply
+ * Turkey's fixed UTC+3 (no DST since 2016, so no timezone-database lookup
+ * needed) ourselves.
  */
 export function parseIstanbulLocalTime(input: string): string {
-  return new Date(`${input}+03:00`).toISOString();
+  const wallClock = input.replace(/Z$/i, "").replace(/[+-]\d{2}:?\d{2}$/, "");
+  return new Date(`${wallClock}+03:00`).toISOString();
 }
 
 /**
