@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the template, which holds only empty placeholders. Without this
+# a fresh clone has no `.env.example` to copy, so the setup step in
+# README.md can't be followed.
+!.env.example
 
 # vercel
 .vercel

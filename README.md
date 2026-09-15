@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Diyarbakır Etkinlik Platformu
 
-## Getting Started
+Diyarbakır'daki konser, tiyatro, atölye ve sergileri tek yerde toplayan bir
+web uygulaması (PWA). Etkinlikler ağırlıklı olarak **otomatik** toplanır:
+resmi bilet satıcıları ve belediyenin kendi sitesi günde iki kez taranır.
+Manuel giriş, sadece otomatik ulaşılamayan etkinlikler için yedektir.
 
-First, run the development server:
+Next.js 15 (App Router) + Supabase (Postgres + Auth + RLS), Vercel'de
+çalışır.
+
+## Hızlı başlangıç
+
+Gereken: Node 20.x ve Docker Desktop (yerel Supabase için).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npx supabase start          # yerel Supabase; çıktıdaki anahtarları not alın
+cp .env.example .env.local  # ve yukarıdaki URL/key değerleriyle doldurun
+npm run dev                 # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Komutlar
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Komut | Ne yapar |
+| --- | --- |
+| `npm run dev` | Geliştirme sunucusu |
+| `npm run build` | Production build |
+| `npm test` | Birim testleri (ağ ve veritabanı gerektirmez, ~0.5 sn) |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint |
+| `npm run scrape` | Üç scraper'ı da çalıştırır ve `.env.local`'deki veritabanına yazar |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Proje yapısı
 
-## Learn More
+```
+app/(public)/     Herkese açık site (liste, detay, giriş/kayıt, favoriler)
+app/admin/        Admin panel — middleware + admin_users allowlist ile korumalı
+components/       Paylaşılan React bileşenleri (kart, harita, filtreler)
+lib/              Supabase istemcileri, tipler, saat dilimi ve format yardımcıları
+scripts/scrapers/ Scraper'lar ve ortak altyapıları — kendi README'si var
+supabase/         Şema migration'ları ve seed verisi
+docs/             Plan ve oturum devir notları
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Nereden başlamalı
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Projeyi ilk kez devralıyorsanız:** [`docs/session-handoff.md`](docs/session-handoff.md)
+  — şu an ne çalışıyor, hangi tuzaklar var, sırada ne var.
+- **Scraper ekleyecek veya düzeltecekseniz:** [`scripts/scrapers/README.md`](scripts/scrapers/README.md)
+  — kaynak ekleme adımları, saat dilimi kuralları, etik sınırlar.
+- **Genel plan ve kapsam:** [`docs/plan.md`](docs/plan.md).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Dikkat
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Saat dilimleri.** Her saat UTC saklanır, Türkiye saatiyle gösterilir.
+  `new Date("...")`'ı offset'siz bir string'le veya `Intl.DateTimeFormat`'ı
+  `timeZone` vermeden kullanmayın; ikisi de sunucunun saat dilimini kullanır
+  (Vercel = UTC) ve sessizce 3 saat kaydırır. `lib/istanbul-time.ts` ve
+  `scripts/scrapers/lib/normalize.ts` bunun içindir.
+- **Scraping etiği.** Her kaynağın `robots.txt`'ine ve kullanım şartlarına
+  uyulur, istek hacmi düşük tutulur, her etkinlik `source_url` ile kaynağına
+  bağlanır. Bot korumasını aşmaya çalışılmaz — ayrıntısı scraper README'sinde.
+- `next`/`eslint-config-next` paketlerini 16'ya yükseltmeyin; bu ortamdaki
+  Node 20.5.0 yetmiyor.

@@ -1,184 +1,168 @@
-# Oturum Özeti — Diyarbakır Etkinlik Platformu MVP
+# Oturum Özeti — Diyarbakır Etkinlik Platformu
 
-Bu dosya, şimdiye kadar yapılan işlerin özetidir. Amaç: projeye daha
-sonra dönen birinin işi kaldığı yerden devam ettirebilmesi. Projenin genel planı için
-[`docs/plan.md`](./plan.md) dosyasına bakın — bu dosya sadece "şu ana kadar
-ne yapıldı, ne durumda" sorusuna cevap verir. **Son güncelleme: kullanıcı
-hesapları + favorileme özelliğinin eklendiği oturum sonu.**
+Bu dosya, projenin **şu anki durumunu** anlatır: projeye yeni katılan ya da aradan zaman geçtikten sonra dönen biri işi kaldığı yerden devam
+ettirebilsin diye. Projenin orijinal planı için
+[`docs/plan.md`](./plan.md); scraper'ların ayrıntısı için
+[`scripts/scrapers/README.md`](../scripts/scrapers/README.md).
 
-## Yapılanlar
+**Son güncelleme:** 2026-09-15 — test altyapısı + CI eklenen oturum sonu.
 
-### 1. Proje iskeleti
-- Next.js **15.5.25** (App Router, TypeScript, Tailwind v4, `src/` dizini
-  yok) `create-next-app` ile kuruldu.
-- **Önemli:** Next.js 16 yerine 15'e sabitlendi çünkü bu makinedeki Node
-  sürümü (20.5.0) Next 16'nın gerektirdiği 20.9.0'ın altında kalıyor.
-  Node yükseltilmediği sürece `next`/`eslint-config-next` paketlerini
-  16'ya çekmeyin, build/typegen kırılır.
-- ESLint flat-config sorunu çözüldü: `eslint-config-next@15` flat config
-  export etmiyor, bu yüzden `eslint.config.mjs` içinde `@eslint/eslintrc`'in
-  `FlatCompat`'ı kullanılıyor.
+---
 
-### 2. Veri katmanı (Supabase)
-- `lib/supabase/client.ts`, `lib/supabase/server.ts`, `lib/supabase/types.ts`
-  — sırasıyla browser client, server client (SSR/Server Components için) ve
-  DB tip tanımları (`Database`, `EventRow`, `Venue`, `Category`, `City`,
-  `ScrapeSource`, `AdminUser`, `Favorite`). **Bu dosyalar tüm projenin ortak
-  sözleşmesi** — yeni kod yazarken buradaki alan adlarını kullanın.
-- `supabase/migrations/0001_init.sql` — asıl şema (5 tablo: cities, venues,
-  categories, events, scrape_sources), RLS politikaları, scraped etkinlikler
-  için dedup unique index.
-- `supabase/migrations/0002_admin_users_and_favorites.sql` — `admin_users`
-  (bkz. "Bilinen sorunlar / güvenlik" altında) ve `favorites` tabloları +
-  ilgili RLS politikaları.
-- `supabase/seed.sql` — Diyarbakır için örnek şehir/mekan/kategori/etkinlik
-  verisi (yerel geliştirme içindir).
-- `supabase/config.toml` — Supabase CLI proje konfigürasyonu. **Not:**
-  `[analytics] enabled = false` olarak ayarlı — nedeni aşağıda "Bilinen
-  sorunlar" bölümünde. Ayrıca `enable_confirmations = false` (yerel auth'ta
-  e-posta onayı istenmiyor, kayıt olunca direkt oturum açılıyor).
-- `lib/supabase/types.ts`'deki `Database` tipi postgrest-js'in beklediği
-  `Relationships`/`Views`/`Functions` alanlarını içermiyor (elle yazıldığı
-  için) — bu yüzden select/insert/update çağrıları tip çıkarımında `never`'a
-  düşüyor. Çözüm olarak proje genelinde tutarlı bir workaround kullanılıyor:
-  okumalarda `.returns<T[]>()` (tüm filtrelerden sonra, `.single()`'dan
-  sonra DEĞİL), yazmalarda `as never` cast'i. Yeni kod eklerken bu deseni
-  takip edin (örnek: `app/admin/actions.ts`, `app/(public)/actions.ts`).
+## Tek cümlede
 
-### 3. Uygulama özellikleri
-- **Public site** (`app/(public)/` route group — ortak header burada,
-  `/admin`'i etkilemez):
-  - `page.tsx` — ana sayfa: kategori/tarih/metin arama filtreleri, **Liste/
-    Harita görünüm geçişi** (`gorunum` query param).
-  - `etkinlik/[id]/page.tsx` — detay sayfası, tekli harita.
-  - `giris/`, `kayit/` — e-posta/şifre ile herkese açık giriş/kayıt.
-  - `favoriler/` — giriş yapan kullanıcının favorilediği etkinlikler.
-  - `layout.tsx` — üst menü (giriş durumu, Favorilerim linki).
-  - `actions.ts` — `toggleFavorite`, `signOutPublic` server action'ları.
-  - Sadece `status='approved'` olan etkinlikler gösteriliyor.
-  - `components/FilterBar.tsx` — kategori/tarih/arama + Liste-Harita toggle.
-  - `components/EventMap.tsx` / `EventMapInner.tsx` — Leaflet+OpenStreetMap
-    (ssr:false dinamik import; Leaflet `window`'a import anında dokunuyor).
-  - `components/FavoriteButton.tsx` — kalp ikonu, giriş yoksa `/giris`'e
-    yönlendirir.
-- **Admin panel:** `app/admin/**`, `middleware.ts` (Supabase Auth + admin
-  allowlist ile route koruması — bkz. "Bilinen sorunlar"), `app/admin/
-  actions.ts` (server actions: onayla/reddet/ekle/düzenle).
-- **PWA:** `app/manifest.ts`, `public/sw.js` (service worker),
-  `app/offline/page.tsx`, `public/icons/icon-192.png` /
-  `icon-512.png` (**placeholder** — turuncu kare + "E" harfi, gerçek marka
-  görseliyle değiştirilmeli).
-- **Scraper framework:** `scripts/scrapers/` — fetch→parse→normalize→
-  dedupe→upsert pipeline'ı, çalışan bir örnek parser
-  (`example-hn.ts`, Hacker News üzerinde pipeline'ı kanıtlamak için —
-  gerçek veri kaynağı DEĞİL), ve gerçek bir kaynak (belediye sitesi vb.)
-  için doldurulmayı bekleyen `diyarbakir-belediye.template.ts`.
-  `.github/workflows/scrape.yml` günde 2 kez cron ile çalıştırıyor
-  (henüz gerçek bir kaynak bağlanmadı).
+Diyarbakır etkinliklerini üç kaynaktan otomatik toplayan, Vercel'de canlı
+çalışan bir Next.js + Supabase PWA'sı. **Scraper asıl veri kaynağıdır**;
+manuel giriş sadece ulaşılamayan etkinlikler için yedektir.
 
-### 4. Doğrulama
-Tüm bu iş, Docker üzerinde **yerel bir Supabase** (Supabase CLI ile —
-`npx supabase start`) instance'ına karşı uçtan uca (Playwright ile
-otomatik) test edildi:
-- Ana sayfa seed verisini doğru gösteriyor (approved etkinlikler, pending
-  olan gizli), arama ve harita görünümü çalışıyor.
-- Yeni ziyaretçi kayıt olup otomatik giriş yapabiliyor, etkinlik
-  favorileyip `/favoriler`'de görebiliyor.
-- Admin olmayan girişli bir kullanıcı `/admin`'e girmeye çalışınca `/`'ye
-  yönlendiriliyor (güvenlik testi — aşağıya bakın).
-- Admin login → onay bekleyen etkinlik listesi → onayla/reddet akışı
-  çalışıyor.
-- `npx tsc --noEmit`, `npx eslint .`, `npx next build` (production)
-  hepsi temiz geçiyor.
+## Şu an ne çalışıyor
 
-### 5. Git commit'leri
-```
-3c657f0 Add public user accounts and event favoriting
-4046c58 Add map view (Leaflet + OpenStreetMap) to public site
-16a1212 Add event search (title/description/venue) to the public homepage
-dc0666d Disable local Supabase analytics (vector) service
-f9c695e Add Diyarbakır MVP: public listing, admin panel, PWA layer, Supabase schema, scraper framework
-9822e6a Scaffold Next.js 15 + Tailwind + Supabase client, pin to Node 20.5-compatible versions
-4f42a50 Initial commit from Create Next App
-```
+- **Public site** (`app/(public)/`) — ana sayfa (kategori/tarih/metin
+  filtreleri, liste ve harita görünümü), etkinlik detayı, giriş/kayıt,
+  favoriler. Sadece `status='approved'` kayıtlar görünür.
+- **Admin panel** (`app/admin/`) — manuel etkinlik ekleme/düzenleme,
+  onayla/reddet. `middleware.ts` + `admin_users` allowlist'i ile korunuyor.
+- **Üç gerçek scraper**, günde 2 kez GitHub Actions cron'u ile:
+  - `biletinial.com` — ~85 etkinlik/çalıştırma
+  - `biletix.com` — ~32 etkinlik/çalıştırma
+  - `diyarbakir.bel.tr` (Büyükşehir Belediyesi) — şu an 0 (aşağıya bakın)
+- **PWA katmanı** — manifest, service worker, offline sayfası.
+- **Test + CI** — `npm test` (112 test, ağ/DB gerektirmez) ve her push'ta
+  typecheck + lint + test çalıştıran `.github/workflows/ci.yml`.
 
-## Bilinen sorunlar / dikkat edilmesi gerekenler
+## Mimari notlar
 
-- **Güvenlik — `admin_users` allowlist'i (migration 0002):** Halka açık
-  kayıt eklenmeden önce, RLS politikaları "authenticated = admin"
-  varsayıyordu ve `middleware.ts` `/admin/*`'e girişi sadece "oturum var
-  mı" diye kontrol ediyordu. Bu, kayıt olan HERHANGİ bir ziyaretçiye tüm
-  tablolarda tam CRUD ve admin paneline giriş hakkı verirdi. Artık
-  `admin_users` tablosunda (id, sadece service-role/SQL editor ile
-  eklenir) listelenen kullanıcılar admin sayılıyor; hem RLS politikaları
-  hem middleware buna bakıyor. **Yeni bir admin eklerken mutlaka bu
-  tabloya da satır eklemeyi unutmayın** (aşağıdaki "admin kullanıcısı"
-  bölümüne bakın) — sadece auth kullanıcısı oluşturmak yetmez, `/admin`'e
-  giremez.
-- **`vector` (analytics/logflare) konteyneri Windows'ta çöküyor:** Docker
-  soketine erişemediği için crash-loop'a giriyor ve bu da `supabase stop`'un
-  takılmasına sebep oluyordu. `supabase/config.toml`'da
-  `[analytics] enabled = false` yapılarak kalıcı çözüldü — bu ayarı geri
-  açmayın (Studio'nun Logs sekmesi çalışmaz ama uygulama için sorun değil).
-- **Gerçek Supabase projesi yok:** Sadece yerel Docker instance'ı var.
-  Production'a çıkmadan önce gerçek bir Supabase Cloud projesi kurulup
-  `.env.local` / Vercel env değişkenleri gerçek URL+key'lerle
-  güncellenmeli. Migration'ları göndermek için: `npx supabase link` +
-  `npx supabase db push`. Production'da `enable_confirmations` muhtemelen
-  `true` olacak (e-posta doğrulama gerekecek) — `/kayit` sayfası bu durumu
-  zaten ele alıyor (oturum dönmezse "e-postanı onayla" mesajı gösteriyor).
-- **PWA ikonları placeholder.**
-- **Scraper'da henüz gerçek bir kaynak yok** — `diyarbakir-belediye.template.ts`
-  dosyasındaki `// TODO:` yorumları gerçek site incelendikten sonra
-  doldurulmalı.
-- **Web push bildirimleri henüz yok** — plan.md'nin Faz 1 kapsamında ama
-  bu oturumda yapılmadı.
+- Next.js **15.5.25** App Router. **Next 16'ya yükseltmeyin:** bu makinedeki
+  Node 20.5.0, Next 16'nın istediği 20.9.0'ın altında.
+- `lib/supabase/types.ts` tüm projenin ortak veri sözleşmesi. Elle yazıldığı
+  için postgrest-js'in beklediği `Relationships`/`Views`/`Functions`
+  alanlarını içermiyor; bu yüzden okumalarda `.returns<T[]>()` (tüm
+  filtrelerden sonra, `.single()`'dan sonra DEĞİL), yazmalarda `as never`
+  deseni kullanılıyor. Scraper tarafında aynı sorun
+  `scripts/scrapers/lib/supabase-admin.ts` içinde tip seviyesinde
+  adapte edilerek çözülüyor.
+- Public sayfalarda `export const dynamic = "force-dynamic"` var. Sebebi:
+  scraper cron'u Supabase'e doğrudan yazıyor, Next.js'ten hiç geçmiyor, yani
+  `revalidatePath` çağıracak bir istek yok. Bu satır olmadan taze veri
+  Next'in fetch cache'inin arkasında takılı kalabiliyor. **Kaldırmayın.**
 
-## Ortamı yeniden ayağa kaldırma
+## Tekrar tekrar ısıran iki konu
+
+### 1. Saat dilimi
+
+Her etkinlik saati UTC olarak saklanır, Türkiye saatiyle (UTC+3, 2016'dan
+beri DST yok) gösterilir. İki tuzak var ve ikisi de canlıda 3 saatlik yanlış
+saat olarak patladı:
+
+- `new Date("2026-09-18T20:00:00")` — offset'siz string **runtime'ın** saat
+  dilimine göre okunur (Vercel ve GitHub Actions = UTC). Bunun yerine
+  `parseIstanbulLocalTime` (scraper) veya `lib/istanbul-time.ts` (uygulama).
+- `Intl.DateTimeFormat`'a `timeZone` vermemek — aynı hata, gösterim
+  tarafında.
+- Ek olarak: `hour12: false` ile `hourCycle: "h23"` aynı şey DEĞİL. Bazı
+  locale'lerde ilki gece yarısını "24:15" diye yazar ve
+  `<input type="datetime-local">` bunu geçersiz sayıp alanı boş gösterir.
+  Her zaman `hourCycle` kullanın.
+
+Bunların hepsi testlerle sabitlendi ve testler bilerek **Türkiye olmayan,
+DST uygulayan** bir saat diliminde (`America/New_York`) koşuyor — böylece
+bir regresyon production'da değil, test çıktısında görünüyor.
+
+### 2. Kaynaklar tarih formatı konusunda tutarsız
+
+biletinial'in `SeanceDate` alanı aynı Türkiye saatini bazen "Z" ekiyle,
+bazen eksiz döndürüyor. Bu iki ayrı buga yol açtı: biri saati hesaplarken
+(`parseIstanbulLocalTime`), diğeri JSON-LD kaydını eşleştirirken
+(`stripDateTimeOffset` uygulanmadığı için etkinliklerin ~%80'i fiyatsız
+kaldı). **Bir kaynaktan gelen iki zaman damgasını karşılaştırırken önce
+`stripDateTimeOffset`'ten geçirin.**
+
+## Dedup ve moderasyon
+
+- Dedup anahtarı **sadece `(title, start_at)`** — `venue_id` bilerek dışarıda.
+  İki kaynak aynı mekânı farklı yazıyor ("... Kültür ve Kongre Merkezi" vs
+  "... KKM"), bu da aynı etkinliğin iki kez listelenmesine yol açıyordu.
+- Scraped etkinlikler **doğrudan `approved`** olarak giriyor; onay kuyruğu
+  kaldırıldı (kaynakların hepsi resmi bilet satıcısı ya da belediyenin
+  kendisi). Ama bir admin elle "reddet" derse, sonraki scrape içeriği
+  tazeler ve `status`'a **dokunmaz** — reddi geri almaz.
+- İleride düşük güvenli bir kaynak eklenirse (ör. plan.md'deki Instagram
+  fikri) o kaynak `status: "pending"` yazmalı; bu varsayılanı miras almamalı.
+
+## Bilinen durumlar
+
+- **Belediye scraper'ı şu an 0 etkinlik getiriyor — bu normal.** 2026-09-15'te
+  doğrulandı: sayfada 20 etkinlik var ama hepsi Mart–Haziran tarihli, yani
+  geçmiş. Log artık bunu açıkça yazıyor ("the municipality has nothing
+  upcoming published right now"). Sıfır ham etkinlik görülürse log farklı bir
+  mesaj verir — o zaman sayfa yapısı değişmiş demektir.
+- **biletinial'de ~14/85 etkinlikte fiyat ve bitiş saati yok.** Kaynak
+  kaynaklı: biletinial'in JSON-LD'si sadece en yakın ~10 seansı listeliyor,
+  uzak tarihli bir etkinlik henüz orada değil. Tarih yaklaştıkça kendiliğinden
+  düzeliyor. Açıklama metni bundan etkilenmiyor (sayfa gövdesinden alınıyor).
+- **bubilet.com.tr scrape edilmiyor.** Tüm siteyi kapsayan bir Cloudflare bot
+  koruması var. Bunu aşmak, otomatik erişim istemediğini açıkça belirtmiş bir
+  siteye karşı tespit-atlatma aracı yazmak olurdu — aynı şeyi bizim yerimize
+  yapan üçüncü parti bir servis (parse.bot) de aynı sebeple kullanılmadı.
+  Açık yollar: bubilet ile resmi veri paylaşımı anlaşması (taslak e-posta
+  yazıldı, gönderildi mi bilinmiyor) veya manuel giriş.
+- **PWA ikonları hâlâ placeholder** (turuncu kare + "E").
+- **Web push bildirimleri yok** (plan.md Faz 1'de var, ertelendi).
+- `.env.local` yerel Supabase'i (`127.0.0.1:54321`) gösteriyor. Scraper'ları
+  elle çalıştırırsanız **yerel** DB'ye yazarlar. Dikkat: env değişkenlerini
+  temizlemek bunu engellemez, çünkü `supabase-admin.ts` `.env.local`'i
+  dotenv ile kendisi yüklüyor.
+- **`vector` (analytics) konteyneri Windows'ta çöküyor** — `supabase/config.toml`'da
+  `[analytics] enabled = false` ile kalıcı çözüldü, geri açmayın.
+
+## Geliştirme
 
 ```bash
-# 1. Yerel Supabase'i başlat (Docker Desktop açık olmalı)
-npx supabase start
+npx supabase start   # yerel Supabase (Docker Desktop açık olmalı)
+npm run dev          # http://localhost:3000
 
-# 2. Next.js dev server
-npm run dev
+npm test             # 112 test, ağ ve DB gerektirmez, ~0.5 sn
+npm run typecheck
+npm run lint
+npm run scrape       # üç scraper'ı da çalıştırır (.env.local'deki DB'ye yazar)
 ```
 
-`.env.local` zaten repo dışında (gitignore'lu) ama daha önce oluşturulmuştu;
-eğer yoksa `npx supabase start` çıktısındaki `API_URL`, `ANON_KEY`,
-`SERVICE_ROLE_KEY` değerleriyle `.env.example`'ı kopyalayıp doldurun.
+> **Not:** `npm run build` çalışırken `npm run dev` açıksa `.next` kilidi
+> yüzünden takılabilir. Ya dev server'ı kapatın ya da build'i Vercel'e
+> bırakın.
 
-**Yerel test admin kullanıcısı** (sadece bu makinedeki Docker volume'ünde
-var olabilir — `supabase stop`/`db reset` ile volume silinirse tekrar
-oluşturulmalı — **iki adım da gerekli**, sadece auth kullanıcısı yetmez):
+Yeni test dosyası eklerseniz `package.json`'daki `scripts.test` listesine de
+ekleyin — Node 20'nin test runner'ı `.ts` dosyalarını glob'layamıyor.
+`scripts/test-registry.test.ts` bunu unutursanız sizi uyarır.
+
+**Yerel test admin kullanıcısı** (iki adım da gerekli — sadece auth
+kullanıcısı oluşturmak `/admin`'e girmeye yetmez):
 
 ```bash
-# 1) Supabase Auth kullanıcısı oluştur, dönen "id"yi not al
+# 1) Auth kullanıcısı oluştur, dönen "id"yi not al
 curl -s -X POST "http://127.0.0.1:54321/auth/v1/admin/users" \
   -H "apikey: <SERVICE_ROLE_KEY>" \
   -H "Authorization: Bearer <SERVICE_ROLE_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@example.com","password":"test1234","email_confirm":true}'
 
-# 2) O id'yi admin_users tablosuna ekle — bu olmadan /admin'e giremez
+# 2) O id'yi admin_users tablosuna ekle
 curl -s -X POST "http://127.0.0.1:54321/rest/v1/admin_users" \
   -H "apikey: <SERVICE_ROLE_KEY>" \
   -H "Authorization: Bearer <SERVICE_ROLE_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"id":"<yukarıdaki id>"}'
 ```
-- E-posta: `admin@example.com`
-- Şifre: `test1234`
 
-Normal (favorileme yapacak) test kullanıcıları için `/kayit` sayfasından
-kayıt olmak yeterli — `admin_users`'a eklenmediği sürece otomatik olarak
-sadece "normal kullanıcı" olurlar.
+Normal kullanıcılar için `/kayit` yeterli — `admin_users`'a eklenmedikleri
+sürece admin olmazlar.
 
-## Sırada ne var (önerilen)
+## Sırada ne var (öneri)
 
-1. Web push bildirimleri (plan.md Faz 1'in son maddesi).
-2. Gerçek bir Supabase Cloud projesi kurup bağlamak.
-3. Vercel'e deploy edip gerçek cihazda PWA "ana ekrana ekle" testi.
-4. En az bir gerçek scraper kaynağını (`diyarbakir-belediye.template.ts`
-   temel alınarak) doldurmak.
-5. PWA ikonlarını gerçek marka görseliyle değiştirmek.
+1. **Daha fazla kaynak.** Asıl hedef bu. Belediye dışındaki kurumlar
+   (üniversiteler, kültür merkezleri, mekânların kendi siteleri) ve
+   plan.md'deki Instagram fikri.
+2. **PWA ikonlarını gerçek marka görseliyle değiştirmek.**
+3. **Web push bildirimleri.**
+4. Bir kaynak sessizce bozulduğunda haber veren bir uyarı mekanizması —
+   şu an bunu ancak CI logunu okuyarak fark ediyoruz.
