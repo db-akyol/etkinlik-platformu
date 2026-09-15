@@ -42,8 +42,21 @@ export function normalizeText(input: string): string {
  * needed) ourselves.
  */
 export function parseIstanbulLocalTime(input: string): string {
-  const wallClock = input.replace(/Z$/i, "").replace(/[+-]\d{2}:?\d{2}$/, "");
-  return new Date(`${wallClock}+03:00`).toISOString();
+  return new Date(`${stripDateTimeOffset(input)}+03:00`).toISOString();
+}
+
+/**
+ * Strips a trailing "Z" or numeric UTC offset ("+03:00", "-0300", ...) off
+ * an ISO-ish date-time string, leaving just the offset-less wall-clock
+ * portion ("2026-10-05T20:00:00"). Exported (not just inlined into
+ * `parseIstanbulLocalTime`) because biletinial.ts also needs this same
+ * normalization to MATCH `SeanceDate` against a detail page's JSON-LD
+ * `startDate` values (which always carry "+03:00", never "Z") — comparing
+ * the raw, un-stripped `SeanceDate` there silently failed to match roughly
+ * 80% of the time whenever `SeanceDate` happened to have its own "Z".
+ */
+export function stripDateTimeOffset(input: string): string {
+  return input.replace(/Z$/i, "").replace(/[+-]\d{2}:?\d{2}$/, "");
 }
 
 /**

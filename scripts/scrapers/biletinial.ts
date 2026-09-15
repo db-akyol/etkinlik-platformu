@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 import { getSupabaseAdmin, MissingSupabaseConfigError } from "./lib/supabase-admin";
 import { getDiyarbakirCityId, resolveCategoryId, resolveVenueId } from "./lib/resolve-refs";
 import { upsertScrapedEvent } from "./lib/upsert-event";
-import { normalizeText, formatPriceTL, parseIstanbulLocalTime } from "./lib/normalize";
+import { normalizeText, formatPriceTL, parseIstanbulLocalTime, stripDateTimeOffset } from "./lib/normalize";
 import type { ScrapedEventInput, ScrapeRunResult } from "./lib/types";
 
 const SOURCE_NAME = "biletinial.com (Diyarbakır)";
@@ -170,12 +170,15 @@ async function fetchAndParse(): Promise<ScrapedEventInput[]> {
       const detailUrl = `https://biletinial.com/tr-tr/${raw.tipForUrl}/${raw.url}`;
       const wasCached = detailCache.has(detailUrl);
       const ldEntries = await fetchEventDetails(detailUrl);
-      // `raw.SeanceDate` ("2026-09-18T20:00:00", no offset) is this seance's
-      // local wall-clock time; the detail page's JSON-LD carries the same
-      // wall-clock time with an explicit "+03:00" suffix, so a plain prefix
-      // match picks out the entry for THIS seance among the play's other
-      // dates/cities.
-      const match = ldEntries.find((e) => e.startDate?.startsWith(raw.SeanceDate));
+      // `raw.SeanceDate` is this seance's local wall-clock time, sometimes
+      // WITH a spurious trailing "Z" (see normalize.ts) — the detail page's
+      // JSON-LD always carries the same wall-clock time with an explicit
+      // "+03:00" suffix, never "Z", so comparing the raw, un-stripped value
+      // silently failed to match whenever SeanceDate happened to have one
+      // (confirmed in production: ~80% no-match rate). Strip it the same
+      // way parseIstanbulLocalTime does before comparing.
+      const seanceWallClock = stripDateTimeOffset(raw.SeanceDate);
+      const match = ldEntries.find((e) => e.startDate?.startsWith(seanceWallClock));
       if (!match && ldEntries.length > 0) {
         // The detail page fetched fine but none of its JSON-LD entries'
         // startDate matched this seance's SeanceDate — a real (if rarer)
