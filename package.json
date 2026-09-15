@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test lib/istanbul-time.test.ts lib/event-filters.test.ts lib/format-event.test.ts scripts/scrapers/lib/normalize.test.ts scripts/scrapers/lib/fetch-retry.test.ts scripts/scrapers/lib/resolve-refs.test.ts scripts/scrapers/lib/upsert-event.test.ts scripts/scrapers/biletinial.test.ts scripts/scrapers/diyarbakir-belediye.test.ts scripts/test-registry.test.ts",
     "scrape": "tsx scripts/scrapers/run-all.ts",
     "scrape:example": "tsx scripts/scrapers/example-hn.ts"
   },

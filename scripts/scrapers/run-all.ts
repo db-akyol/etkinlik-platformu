@@ -2,10 +2,9 @@
  * run-all.ts — runs every ACTIVE scraper in sequence and prints a summary.
  *
  * "Active" means: a real parser module (exports `run(): Promise<ScrapeRunResult>`)
- * that has been explicitly added to the `PARSERS` list below. `.template.ts`
- * files (see `diyarbakir-belediye.template.ts`) are never picked up
- * automatically — a template only becomes active once a developer renames it,
- * fills in the real selectors, and adds it here.
+ * that has been explicitly added to the `PARSERS` list below. Nothing is ever
+ * picked up automatically — a new parser only runs once it's imported and
+ * listed here.
  *
  * This is what both `npm run scrape` (local/manual) and the GitHub Actions
  * cron (.github/workflows/scrape.yml, twice daily) invoke.

@@ -6,9 +6,9 @@
  * cookies, browser storage, etc). Scraper scripts run as plain Node processes
  * (via `tsx`, locally or in GitHub Actions), so we use `@supabase/supabase-js`'s
  * plain `createClient` with the **service role key**, which bypasses Row Level
- * Security entirely. That's required here: scrapers write rows with
- * `status: "pending"` before any admin/auth session exists, and RLS policies
- * (see supabase/schema.sql) only grant write access to `authenticated` users.
+ * Security entirely. That's required here: scrapers write to `events` with no
+ * admin/auth session in play at all, and RLS policies (see supabase/schema.sql)
+ * only grant write access to `authenticated` users.
  *
  * NEVER import this file from anything that ships to the browser — the
  * service role key must stay server/CI-only (see `.env.local`, and
@@ -116,7 +116,7 @@ export function getSupabaseAdmin(): SupabaseAdminClient {
         "runs (see .env.local.example / README), or set them as GitHub Actions " +
         "secrets for CI runs (see .github/workflows/scrape.yml). Note: this is " +
         "the SERVICE ROLE key (Project Settings -> API), not the anon key — it " +
-        "is required to bypass RLS and insert `status: pending` scraped rows.",
+        "is required to bypass RLS and write scraped rows with no auth session.",
     );
   }
 

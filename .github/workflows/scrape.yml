@@ -2,9 +2,14 @@ name: Scrape events
 
 # Runs the scraper framework (scripts/scrapers/run-all.ts) twice a day.
 # See docs/plan.md's scraping ethics note: this cadence is deliberately low
-# (2x/day, not hourly) to avoid hammering source sites. Scraped events always
-# land as `status: "pending"` and need admin approval before going public —
-# see scripts/scrapers/lib/upsert-event.ts.
+# (2x/day, not hourly) to avoid hammering source sites.
+#
+# Scraped events are published immediately (`status: "approved"`) — the
+# approval queue was removed once every active source turned out to be an
+# official ticket vendor or the municipality itself, where there's no
+# realistic reason to reject a listing. Re-scraping an event an admin DID
+# reject by hand leaves its status alone rather than resurrecting it. See
+# scripts/scrapers/lib/upsert-event.ts (and its tests) for both rules.
 
 on:
   schedule:

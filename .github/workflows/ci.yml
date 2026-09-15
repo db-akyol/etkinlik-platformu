@@ -1,0 +1,50 @@
+name: CI
+
+# Typecheck, lint and unit-test on every push and PR.
+#
+# Vercel already builds on push, but it only reports after a deploy is under
+# way and it doesn't run the test suite at all — this gives a fast, free
+# signal on the parts that have actually broken in the past (the pure
+# date/HTML-parsing helpers under scripts/scrapers and lib/).
+#
+# Deliberately NOT included: a run of the scrapers themselves. Those hit
+# third-party sites and a real Supabase project, so running them per-push
+# would both hammer the sources and write to production. They stay on their
+# own twice-daily schedule in scrape.yml.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          # Nothing in this job launches a browser (biletix.ts needs one, but
+          # the scrapers only run from scrape.yml) — skip the ~150MB Chromium
+          # download the playwright package would otherwise do on install.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
