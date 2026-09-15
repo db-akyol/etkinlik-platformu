@@ -242,7 +242,13 @@ async function fetchAndParse(): Promise<ScrapedEventInput[]> {
 
     for (const raw of pageItems) {
       if (!raw.title) continue;
-      items.push(...itemToEvents(raw));
+      // Unlike the ticket vendors (which only ever list shows still on
+      // sale), this listing includes events that have already happened —
+      // confirmed against a live scrape where every one of 62 items was in
+      // the past. The listing isn't in guaranteed chronological order (it
+      // looks closer to "most recently published"), so this can't be turned
+      // into an early pagination cutoff — just drop anything already over.
+      items.push(...itemToEvents(raw).filter((e) => new Date(e.start_at).getTime() >= Date.now()));
     }
 
     pageNumber++;

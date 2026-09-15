@@ -12,10 +12,17 @@ const EVENT_SELECT =
 
 type SearchParams = { [key: string]: string | string[] | undefined };
 
-/** Returns a [gte, lt) ISO range for the "tarih" quick filter, if any. */
+/**
+ * Returns a [gte, lt) ISO range for the event list. Always floors at
+ * "start of today" (Istanbul) regardless of the "tarih" quick filter — a
+ * source can list events that have already happened (the municipality's
+ * listing does; ticket vendors never have, since they only sell upcoming
+ * shows, which is why this went unnoticed until a second source surfaced
+ * it), and past events sorting to the top of an ascending-by-date list is
+ * never what a visitor wants. `tarih` only ever narrows the upper bound
+ * further (today/this week/this month); it never removes the floor.
+ */
 function getDateRange(tarih?: string): { gte?: string; lt?: string } {
-  if (!tarih) return {};
-
   // Midnight today in Istanbul, expressed as a correct UTC instant — see
   // lib/istanbul-time.ts for why the naive `new Date(y, m, d)` version was
   // wrong for part of every day.
@@ -29,7 +36,7 @@ function getDateRange(tarih?: string): { gte?: string; lt?: string } {
   } else if (tarih === "ay") {
     end.setMonth(end.getMonth() + 1);
   } else {
-    return {};
+    return { gte: startOfToday.toISOString() };
   }
 
   return { gte: startOfToday.toISOString(), lt: end.toISOString() };
