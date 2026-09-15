@@ -24,24 +24,20 @@
  */
 import { run as runBiletinial } from "./biletinial";
 import { run as runBiletix } from "./biletix";
-// TODO: once a real parser is built from diyarbakir-belediye.template.ts,
-// rename it (dropping `.template`) and wire it in here, e.g.:
-// import { run as runDiyarbakirBelediye } from "./diyarbakir-belediye";
+import { run as runDiyarbakirBelediye } from "./diyarbakir-belediye";
 //
 // bubilet.com.tr (a source the project owner asked about) is intentionally
 // NOT scraped: it sits behind a Cloudflare bot-challenge ("Just a moment...")
 // that actively blocks non-interactive requests. Defeating that would mean
 // building detection-evasion tooling against a site that has explicitly
 // signaled it doesn't want automated access — out of scope for this project.
+// A third-party paid "API" (parse.bot's bubilet wrapper) that reportedly
+// does this on our behalf was considered and declined for the same reason.
 import type { ScrapeRunResult } from "./lib/types";
 
 type Parser = () => Promise<ScrapeRunResult>;
 
-const PARSERS: Parser[] = [
-  runBiletinial,
-  runBiletix,
-  // runDiyarbakirBelediye,
-];
+const PARSERS: Parser[] = [runBiletinial, runBiletix, runDiyarbakirBelediye];
 
 async function main() {
   console.log(`Running ${PARSERS.length} scraper(s)...\n`);
