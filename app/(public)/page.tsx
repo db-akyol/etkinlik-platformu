@@ -6,6 +6,15 @@ import { createClient } from "@/lib/supabase/server";
 import { istanbulLocalToUtcIso, istanbulTodayDateString } from "@/lib/istanbul-time";
 import type { Category, City } from "@/lib/supabase/types";
 
+// Event content here comes from the scraper cron (writes directly to
+// Supabase, bypassing Next.js entirely — there's no request that could ever
+// call revalidatePath for it). Without this, a fresh scrape run's data could
+// sit behind Next's fetch Data Cache indefinitely (a route rendering
+// dynamically due to cookies()/searchParams does NOT by itself guarantee
+// the individual fetch()es inside it are uncached) — force every request to
+// hit Supabase for real, current data.
+export const dynamic = "force-dynamic";
+
 // Keep this in sync with EventWithRelations in components/EventCard.tsx.
 const EVENT_SELECT =
   "*, venue:venues(id, name, address, lat, lng), category:categories(id, name, slug)" as const;

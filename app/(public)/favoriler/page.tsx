@@ -2,6 +2,10 @@ import { redirect } from "next/navigation";
 import EventCard, { type EventWithRelations } from "@/components/EventCard";
 import { createClient } from "@/lib/supabase/server";
 
+// See app/(public)/page.tsx's matching comment — favorited events' content
+// can change via the scraper cron, which never calls revalidatePath.
+export const dynamic = "force-dynamic";
+
 // Keep the embedded event shape in sync with EventWithRelations.
 const FAVORITE_SELECT =
   "event:events(*, venue:venues(id, name, address, lat, lng), category:categories(id, name, slug))" as const;
