@@ -104,6 +104,22 @@ interface BiletinialLdEvent {
 
 const detailCache = new Map<string, BiletinialLdEvent[]>();
 
+/**
+ * Counts of how detail-page enrichment (price/description/end time) went,
+ * across the whole run. This is NOT the same thing as `errors` in
+ * `ScrapeRunResult` — a failed detail-page fetch does not fail the run or
+ * even the individual event (it still upserts with `price`/`description`
+ * left null, same as before this enrichment existed) — but a run where a
+ * large fraction of these silently failed would otherwise look identical
+ * in the summary to one where they all succeeded (`upserted=85 errors=0`
+ * either way), which is exactly how a real failure (all detail-page
+ * requests silently failing from GitHub Actions' IPs) went unnoticed for
+ * a while. Reported explicitly in `run()`'s log instead of only via a
+ * per-URL `console.warn` that's easy to miss in a long CI log.
+ */
+let detailFetchFailed = 0;
+let detailNoMatch = 0;
+
 async function fetchEventDetails(detailUrl: string): Promise<BiletinialLdEvent[]> {
   const cached = detailCache.get(detailUrl);
   if (cached) return cached;
@@ -113,6 +129,8 @@ async function fetchEventDetails(detailUrl: string): Promise<BiletinialLdEvent[]
       headers: { "User-Agent": USER_AGENT, Accept: "text/html" },
     });
     if (!res.ok) {
+      console.warn(`[${SOURCE_NAME}] detail page HTTP ${res.status} for ${detailUrl}`);
+      detailFetchFailed++;
       detailCache.set(detailUrl, []);
       return [];
     }
@@ -120,6 +138,8 @@ async function fetchEventDetails(detailUrl: string): Promise<BiletinialLdEvent[]
     const html = await res.text();
     const match = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
     if (!match) {
+      console.warn(`[${SOURCE_NAME}] no JSON-LD block found on detail page ${detailUrl}`);
+      detailFetchFailed++;
       detailCache.set(detailUrl, []);
       return [];
     }
@@ -130,6 +150,7 @@ async function fetchEventDetails(detailUrl: string): Promise<BiletinialLdEvent[]
     return entries;
   } catch (err) {
     console.warn(`[${SOURCE_NAME}] failed to fetch/parse detail page ${detailUrl}:`, err);
+    detailFetchFailed++;
     detailCache.set(detailUrl, []);
     return [];
   }
@@ -155,6 +176,13 @@ async function fetchAndParse(): Promise<ScrapedEventInput[]> {
       // match picks out the entry for THIS seance among the play's other
       // dates/cities.
       const match = ldEntries.find((e) => e.startDate?.startsWith(raw.SeanceDate));
+      if (!match && ldEntries.length > 0) {
+        // The detail page fetched fine but none of its JSON-LD entries'
+        // startDate matched this seance's SeanceDate — a real (if rarer)
+        // failure mode distinct from the page not loading at all, worth
+        // telling apart in the summary below.
+        detailNoMatch++;
+      }
 
       items.push({
         title: normalizeText(raw.etkinlik),
@@ -188,9 +216,19 @@ async function fetchAndParse(): Promise<ScrapedEventInput[]> {
 }
 
 export async function run(): Promise<ScrapeRunResult> {
+  detailFetchFailed = 0;
+  detailNoMatch = 0;
+
   console.log(`[${SOURCE_NAME}] fetching event pages...`);
   const items = await fetchAndParse();
   console.log(`[${SOURCE_NAME}] parsed ${items.length} item(s).`);
+  console.log(
+    `[${SOURCE_NAME}] detail-page enrichment: ${detailFetchFailed} failed to fetch/parse, ` +
+      `${detailNoMatch} fetched but had no matching date` +
+      (detailFetchFailed > 0
+        ? " — price/description will be missing for those events until this stops failing."
+        : ""),
+  );
 
   let supabase;
   let cityId: string;
