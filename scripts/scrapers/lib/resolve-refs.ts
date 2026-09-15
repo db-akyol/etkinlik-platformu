@@ -112,7 +112,9 @@ const TURKISH_FOLD: Record<string, string> = {
   ü: "u", Ü: "u",
 };
 
-function slugify(input: string): string {
+/** Exported for resolve-refs.test.ts — the Turkish folding above is subtle
+ *  enough to be worth pinning without needing a database. */
+export function slugify(input: string): string {
   const folded = input
     .split("")
     .map((ch) => TURKISH_FOLD[ch] ?? ch)

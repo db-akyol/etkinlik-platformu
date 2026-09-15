@@ -28,6 +28,7 @@ import { getSupabaseAdmin, MissingSupabaseConfigError } from "./lib/supabase-adm
 import { getDiyarbakirCityId, resolveCategoryId, resolveVenueId } from "./lib/resolve-refs";
 import { upsertScrapedEvent } from "./lib/upsert-event";
 import { normalizeText, formatPriceTL, parseIstanbulLocalTime } from "./lib/normalize";
+import { fetchWithRetry } from "./lib/fetch-retry";
 import type { ScrapedEventInput, ScrapeRunResult } from "./lib/types";
 
 const SOURCE_NAME = "Diyarbakır Büyükşehir Belediyesi — Etkinlikler";
@@ -63,7 +64,7 @@ function stripHtml(input: string): string {
  * replaced, not a scraping artifact. Storing that verbatim would be worse
  * than storing nothing.
  */
-function hasRealText(input: string | null | undefined): boolean {
+export function hasRealText(input: string | null | undefined): boolean {
   if (!input) return false;
   return stripHtml(input).replace(/\.+/g, "").trim().length > 0;
 }
@@ -83,7 +84,7 @@ interface BelediyeCover {
   formats?: Record<string, BelediyeImageFormat>;
 }
 
-interface BelediyeItem {
+export interface BelediyeItem {
   title: string;
   slug: string;
   summary: string | null;
@@ -114,8 +115,11 @@ interface BelediyeItem {
  * manual bracket-depth matching (a regex can't reliably find the matching
  * `]` across arbitrarily nested content). If the page's structure changes,
  * this throws with a clear message rather than silently returning nothing.
+ *
+ * Exported for diyarbakir-belediye.test.ts, which pins it against a trimmed
+ * copy of the real page's chunk format.
  */
-function extractItems(html: string): BelediyeItem[] {
+export function extractItems(html: string): BelediyeItem[] {
   const chunkRe = /self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)/g;
   let match: RegExpExecArray | null;
   let raw = "";
@@ -169,9 +173,11 @@ function extractItems(html: string): BelediyeItem[] {
 }
 
 async function fetchPage(pageNumber: number): Promise<BelediyeItem[]> {
-  const res = await fetch(`${BASE_URL}/etkinlikler?sayfa=${pageNumber}`, {
-    headers: { "User-Agent": USER_AGENT, Accept: "text/html" },
-  });
+  const res = await fetchWithRetry(
+    `${BASE_URL}/etkinlikler?sayfa=${pageNumber}`,
+    { headers: { "User-Agent": USER_AGENT, Accept: "text/html" } },
+    { label: SOURCE_NAME },
+  );
   if (!res.ok) {
     throw new Error(`Fetch failed for page ${pageNumber}: ${res.status} ${res.statusText}`);
   }
@@ -184,7 +190,7 @@ function resolveImageUrl(cover: BelediyeCover | null | undefined): string | null
   return path ? `${BASE_URL}${path}` : null;
 }
 
-function itemToEvents(item: BelediyeItem): ScrapedEventInput[] {
+export function itemToEvents(item: BelediyeItem): ScrapedEventInput[] {
   const description = hasRealText(item.content_html)
     ? stripHtml(item.content_html!)
     : hasRealText(item.summary)

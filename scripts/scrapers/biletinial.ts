@@ -24,6 +24,7 @@ import { getSupabaseAdmin, MissingSupabaseConfigError } from "./lib/supabase-adm
 import { getDiyarbakirCityId, resolveCategoryId, resolveVenueId } from "./lib/resolve-refs";
 import { upsertScrapedEvent } from "./lib/upsert-event";
 import { normalizeText, formatPriceTL, parseIstanbulLocalTime, stripDateTimeOffset } from "./lib/normalize";
+import { fetchWithRetry } from "./lib/fetch-retry";
 import type { ScrapedEventInput, ScrapeRunResult } from "./lib/types";
 
 const SOURCE_NAME = "biletinial.com (Diyarbakır)";
@@ -77,7 +78,13 @@ async function fetchPage(pageNumber: number): Promise<BiletinialResponse> {
     `https://biletinial.com/GetAllEventsByCity?cityId=${DIYARBAKIR_CITY_ID}` +
     `&langId=1&countryId=3&langCode=tr&pageNumber=${pageNumber}&pageSize=${PAGE_SIZE}&initial=${pageNumber === 1}`;
 
-  const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, Accept: "application/json" } });
+  // Retried: a throw here aborts the whole biletinial run (unlike a failed
+  // detail-page fetch, which only costs one event its price/description).
+  const res = await fetchWithRetry(
+    url,
+    { headers: { "User-Agent": USER_AGENT, Accept: "application/json" } },
+    { label: SOURCE_NAME },
+  );
   if (!res.ok) {
     throw new Error(`Fetch failed for page ${pageNumber}: ${res.status} ${res.statusText}`);
   }
@@ -127,8 +134,11 @@ const DESCRIPTION_CONTAINER_CLASS = "yds_cinema_movie_thread_info";
  * regex — the container has nested `<div>`s elsewhere on the page, and a
  * naive `[\s\S]*?</div>` would stop at the FIRST nested close tag instead
  * of the container's own.
+ *
+ * Exported for biletinial.test.ts — this is fiddly index arithmetic that is
+ * worth pinning down without a network round-trip.
  */
-function extractDivByClass(html: string, className: string): string | null {
+export function extractDivByClass(html: string, className: string): string | null {
   const classIdx = html.indexOf(`class="${className}"`);
   if (classIdx < 0) return null;
 
@@ -155,7 +165,7 @@ function extractDivByClass(html: string, className: string): string | null {
   return null;
 }
 
-function extractFullDescription(html: string): string | null {
+export function extractFullDescription(html: string): string | null {
   const inner = extractDivByClass(html, DESCRIPTION_CONTAINER_CLASS);
   if (!inner) return null;
   const text = normalizeText(inner.replace(/<[^>]+>/g, " "));
@@ -185,9 +195,14 @@ async function fetchEventDetails(detailUrl: string): Promise<BiletinialDetailPag
   if (cached) return cached;
 
   try {
-    const res = await fetch(detailUrl, {
-      headers: { "User-Agent": USER_AGENT, Accept: "text/html" },
-    });
+    // One retry only (not the default two): this runs ~90 times per run and
+    // a failure here degrades gracefully, so it isn't worth stretching the
+    // job's 15-minute budget over.
+    const res = await fetchWithRetry(
+      detailUrl,
+      { headers: { "User-Agent": USER_AGENT, Accept: "text/html" } },
+      { label: SOURCE_NAME, retries: 1 },
+    );
     if (!res.ok) {
       console.warn(`[${SOURCE_NAME}] detail page HTTP ${res.status} for ${detailUrl}`);
       detailFetchFailed++;
