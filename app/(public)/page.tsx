@@ -1,9 +1,10 @@
 import { Suspense } from "react";
-import EventCard, { formatEventDateTime, type EventWithRelations } from "@/components/EventCard";
+import EventCard, { type EventWithRelations } from "@/components/EventCard";
+import { formatEventDateTime } from "@/lib/format-event";
 import EventMap, { type MapMarker } from "@/components/EventMap";
 import FilterBar from "@/components/FilterBar";
 import { createClient } from "@/lib/supabase/server";
-import { istanbulLocalToUtcIso, istanbulTodayDateString } from "@/lib/istanbul-time";
+import { getDateRange } from "@/lib/event-filters";
 import type { Category, City } from "@/lib/supabase/types";
 
 // Event content here comes from the scraper cron (writes directly to
@@ -20,36 +21,6 @@ const EVENT_SELECT =
   "*, venue:venues(id, name, address, lat, lng), category:categories(id, name, slug)" as const;
 
 type SearchParams = { [key: string]: string | string[] | undefined };
-
-/**
- * Returns a [gte, lt) ISO range for the event list. Always floors at
- * "start of today" (Istanbul) regardless of the "tarih" quick filter — a
- * source can list events that have already happened (the municipality's
- * listing does; ticket vendors never have, since they only sell upcoming
- * shows, which is why this went unnoticed until a second source surfaced
- * it), and past events sorting to the top of an ascending-by-date list is
- * never what a visitor wants. `tarih` only ever narrows the upper bound
- * further (today/this week/this month); it never removes the floor.
- */
-function getDateRange(tarih?: string): { gte?: string; lt?: string } {
-  // Midnight today in Istanbul, expressed as a correct UTC instant — see
-  // lib/istanbul-time.ts for why the naive `new Date(y, m, d)` version was
-  // wrong for part of every day.
-  const startOfToday = new Date(istanbulLocalToUtcIso(`${istanbulTodayDateString()}T00:00`));
-
-  const end = new Date(startOfToday);
-  if (tarih === "bugun") {
-    end.setDate(end.getDate() + 1);
-  } else if (tarih === "hafta") {
-    end.setDate(end.getDate() + 7);
-  } else if (tarih === "ay") {
-    end.setMonth(end.getMonth() + 1);
-  } else {
-    return { gte: startOfToday.toISOString() };
-  }
-
-  return { gte: startOfToday.toISOString(), lt: end.toISOString() };
-}
 
 export default async function Home({
   searchParams,
@@ -102,7 +73,7 @@ export default async function Home({
       .eq("city_id", activeCity.id)
       .order("start_at", { ascending: true });
 
-    if (gte) query = query.gte("start_at", gte);
+    query = query.gte("start_at", gte);
     if (lt) query = query.lt("start_at", lt);
 
     const { data } = await query;

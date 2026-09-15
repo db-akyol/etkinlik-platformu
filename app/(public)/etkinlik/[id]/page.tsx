@@ -1,13 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  formatEventDateTime,
-  formatEventPrice,
-  type EventWithRelations,
-} from "@/components/EventCard";
+import { type EventWithRelations } from "@/components/EventCard";
 import EventMap from "@/components/EventMap";
 import FavoriteButton from "@/components/FavoriteButton";
+import { formatEventDateTime, formatEventPrice } from "@/lib/format-event";
 import { createClient } from "@/lib/supabase/server";
 
 // Event content here comes from the scraper cron (writes directly to

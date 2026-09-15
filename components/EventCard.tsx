@@ -1,5 +1,6 @@
 import Link from "next/link";
 import FavoriteButton from "@/components/FavoriteButton";
+import { formatEventDateTime, formatEventPrice } from "@/lib/format-event";
 import type { Category, EventRow, Venue } from "@/lib/supabase/types";
 
 /**
@@ -11,37 +12,6 @@ export type EventWithRelations = EventRow & {
   venue: Pick<Venue, "id" | "name" | "address" | "lat" | "lng"> | null;
   category: Pick<Category, "id" | "name" | "slug"> | null;
 };
-
-/**
- * Formats an ISO timestamp as "14 Eylül 2026, 20:00" in Turkish locale.
- *
- * `timeZone: "Europe/Istanbul"` is required here, not cosmetic: without it
- * `Intl.DateTimeFormat` renders in the RUNTIME's timezone (Vercel's Node
- * functions default to UTC), which silently showed every event 3 hours
- * earlier than its real Turkey-local start time.
- */
-export function formatEventDateTime(iso: string): string {
-  const date = new Date(iso);
-  const datePart = new Intl.DateTimeFormat("tr-TR", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "Europe/Istanbul",
-  }).format(date);
-  const timePart = new Intl.DateTimeFormat("tr-TR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "Europe/Istanbul",
-  }).format(date);
-  return `${datePart}, ${timePart}`;
-}
-
-/** Returns the display price, or "Ücretsiz" when there is none set. */
-export function formatEventPrice(price: string | null): string {
-  if (!price || price.trim() === "") return "Ücretsiz";
-  return price;
-}
 
 export default function EventCard({
   event,

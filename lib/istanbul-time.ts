@@ -54,7 +54,16 @@ export function utcIsoToIstanbulLocal(iso: string | null): string {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
+    // `hourCycle: "h23"`, NOT `hour12: false`. They are not synonyms: with
+    // `en-CA`, `hour12: false` selects the `h24` cycle, which renders
+    // midnight as "24" — so an event starting 00:15 Istanbul came back as
+    // "2026-09-18T24:15", which `<input type="datetime-local">` rejects as
+    // malformed and silently renders as an EMPTY field. An admin opening
+    // such an event to edit anything else would see (and could save) a blank
+    // start time. `h23` renders it as "00". (Note the two options are
+    // mutually exclusive per spec — passing `hour12` alongside this would
+    // override it, so it's deliberately absent.)
+    hourCycle: "h23",
   }).formatToParts(date);
 
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
