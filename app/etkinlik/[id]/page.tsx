@@ -6,11 +6,12 @@ import {
   formatEventPrice,
   type EventWithRelations,
 } from "@/components/EventCard";
+import EventMap from "@/components/EventMap";
 import { createClient } from "@/lib/supabase/server";
 
 // Keep this in sync with EventWithRelations in components/EventCard.tsx.
 const EVENT_SELECT =
-  "*, venue:venues(id, name, address), category:categories(id, name, slug)" as const;
+  "*, venue:venues(id, name, address, lat, lng), category:categories(id, name, slug)" as const;
 
 type PageParams = { id: string };
 
@@ -120,6 +121,20 @@ export default async function EventDetailPage({
                 <p className="text-zinc-500 dark:text-zinc-400">{event.venue.address}</p>
               )}
             </div>
+          )}
+
+          {event.venue?.lat != null && event.venue?.lng != null && (
+            <EventMap
+              markers={[
+                {
+                  id: event.id,
+                  lat: event.venue.lat,
+                  lng: event.venue.lng,
+                  title: event.venue.name,
+                },
+              ]}
+              className="h-64 w-full rounded-lg"
+            />
           )}
 
           {event.description && (

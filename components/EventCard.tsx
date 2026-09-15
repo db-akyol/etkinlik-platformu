@@ -7,7 +7,7 @@ import type { Category, EventRow, Venue } from "@/lib/supabase/types";
  * select used on the public listing and detail pages.
  */
 export type EventWithRelations = EventRow & {
-  venue: Pick<Venue, "id" | "name" | "address"> | null;
+  venue: Pick<Venue, "id" | "name" | "address" | "lat" | "lng"> | null;
   category: Pick<Category, "id" | "name" | "slug"> | null;
 };
 

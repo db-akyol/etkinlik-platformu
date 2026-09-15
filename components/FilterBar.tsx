@@ -23,6 +23,7 @@ export default function FilterBar({ categories }: { categories: Category[] }) {
 
   const activeCategory = searchParams.get("kategori") ?? "";
   const activeDate = searchParams.get("tarih") ?? "";
+  const activeView = searchParams.get("gorunum") === "harita" ? "harita" : "liste";
 
   const [searchInput, setSearchInput] = useState(searchParams.get("q") ?? "");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -81,21 +82,44 @@ export default function FilterBar({ categories }: { categories: Category[] }) {
             </button>
           ))}
         </div>
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-zinc-600 dark:text-zinc-400">Kategori</span>
-          <select
-            value={activeCategory}
-            onChange={(e) => updateParam("kategori", e.target.value)}
-            className="rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm text-zinc-900 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
-          >
-            <option value="">Tüm Kategoriler</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.slug}>
-                {category.name}
-              </option>
+        <div className="flex items-center gap-3">
+          <div className="flex rounded-lg border border-black/10 p-0.5 dark:border-white/10">
+            {(
+              [
+                { value: "liste", label: "Liste" },
+                { value: "harita", label: "Harita" },
+              ] as const
+            ).map((view) => (
+              <button
+                key={view.value}
+                type="button"
+                onClick={() => updateParam("gorunum", view.value === "liste" ? "" : view.value)}
+                className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+                  activeView === view.value
+                    ? "bg-indigo-600 text-white"
+                    : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                }`}
+              >
+                {view.label}
+              </button>
             ))}
-          </select>
-        </label>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-zinc-600 dark:text-zinc-400">Kategori</span>
+            <select
+              value={activeCategory}
+              onChange={(e) => updateParam("kategori", e.target.value)}
+              className="rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm text-zinc-900 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
+            >
+              <option value="">Tüm Kategoriler</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.slug}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
     </div>
   );
