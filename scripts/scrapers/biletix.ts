@@ -25,6 +25,7 @@ import { getSupabaseAdmin, MissingSupabaseConfigError } from "./lib/supabase-adm
 import { getDiyarbakirCityId, resolveCategoryId, resolveVenueId } from "./lib/resolve-refs";
 import { upsertScrapedEvent } from "./lib/upsert-event";
 import { normalizeText, formatPriceTL } from "./lib/normalize";
+import { fetchWithRetry } from "./lib/fetch-retry";
 import type { ScrapedEventInput, ScrapeRunResult } from "./lib/types";
 
 const SOURCE_NAME = "biletix.com (Diyarbakır)";
@@ -77,7 +78,13 @@ const performanceCache = new Map<string, BiletixPerformance[]>();
 
 async function fetchJson<T>(url: string): Promise<T | null> {
   try {
-    const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, Accept: "application/json" } });
+    // One retry only: this is the enrichment path, called twice per event,
+    // and a failure here just leaves that event without a price.
+    const res = await fetchWithRetry(
+      url,
+      { headers: { "User-Agent": USER_AGENT, Accept: "application/json" } },
+      { label: SOURCE_NAME, retries: 1 },
+    );
     if (!res.ok) return null;
     const body = (await res.json()) as { status?: string; data?: T };
     return body.status === "SUCCESS" ? (body.data ?? null) : null;
