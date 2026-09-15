@@ -5,9 +5,20 @@
  *  1. `source_type` is always forced to `"scraped"` here — never trust a
  *     parser to set it correctly, since a bug that let scraped data in as
  *     `"manual"` would skip moderation entirely.
- *  2. `status` is always forced to `"pending"` — scraped events must be
- *     admin-approved before they're public (RLS in supabase/schema.sql only
- *     exposes `status = 'approved'` rows to anon/public reads).
+ *  2. `status` is always forced to `"approved"` — the project owner decided
+ *     a manual approve/reject queue serves no purpose for these sources: all
+ *     current parsers (biletinial.ts, biletix.ts) pull from official ticket
+ *     vendors, there's no realistic reason to reject one of their listings,
+ *     and requiring a click per event just to publish ~100+ real events
+ *     twice a day is pure toil. `admin_users`-gated RLS write access (see
+ *     supabase/migrations/0002_...) is still the actual security boundary
+ *     here, not this approval step.
+ *     NOTE for future low-trust sources (e.g. the Instagram-based scraping
+ *     mentioned in docs/plan.md): unlike an official vendor's structured
+ *     feed, a scraped Instagram caption is much more likely to be
+ *     garbled/wrong/spam, so blanket-approving THOSE the same way would
+ *     defeat the point of moderation — that source should force
+ *     `status: "pending"` explicitly rather than reuse this default as-is.
  *
  * --- Dedup / ON CONFLICT caveat -------------------------------------------
  *
@@ -61,7 +72,7 @@ export async function upsertScrapedEvent(
   const payload: Omit<EventRow, "id" | "created_at"> = {
     ...event,
     source_type: "scraped",
-    status: "pending",
+    status: "approved",
   };
 
   // --- Attempt 1: DB-level upsert (see file header for why this currently
@@ -94,9 +105,16 @@ export async function upsertScrapedEvent(
   }
 
   if (existing) {
+    // Deliberately NOT `status` here: an admin may have hand-rejected this
+    // exact row (bad data, a duplicate they spotted, whatever) via /admin's
+    // reject action. Re-scraping the same title/start_at/venue on the next
+    // cron run must refresh its content (price/description/image can
+    // legitimately change) WITHOUT silently resurrecting it as "approved"
+    // and undoing that decision.
+    const { status: _status, ...updateFields } = payload;
     const { error: updateError } = await supabase
       .from("events")
-      .update(payload)
+      .update(updateFields)
       .eq("id", existing.id);
 
     return updateError ? { action: "error", error: updateError } : { action: "updated" };

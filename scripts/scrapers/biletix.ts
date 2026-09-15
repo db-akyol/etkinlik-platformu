@@ -21,10 +21,10 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
-import { getSupabaseAdmin } from "./lib/supabase-admin";
+import { getSupabaseAdmin, MissingSupabaseConfigError } from "./lib/supabase-admin";
 import { getDiyarbakirCityId, resolveCategoryId, resolveVenueId } from "./lib/resolve-refs";
 import { upsertScrapedEvent } from "./lib/upsert-event";
-import { normalizeText } from "./lib/normalize";
+import { normalizeText, formatPriceTL } from "./lib/normalize";
 import type { ScrapedEventInput, ScrapeRunResult } from "./lib/types";
 
 const SOURCE_NAME = "biletix.com (Diyarbakır)";
@@ -53,6 +53,58 @@ function mapCategory(category: string | null | undefined): string | null {
 
 function stripHtml(input: string): string {
   return normalizeText(input.replace(/<[^>]+>/g, " "));
+}
+
+// The Solr search doc (see `BiletixDoc`) carries no price and only a short
+// blurb — full description, venue rules ("Kapı Açılış Saati...") and price
+// live behind two small JSON APIs the event's own detail page calls
+// server-side (found via its embedded Angular `ng-state` transfer blob).
+// Verified with a bare `curl` (no Queue-it session needed here, unlike
+// `/solr/`): these are plainly public, cacheable-by-design endpoints
+// (`bxcached` in the path), not something gated behind the search page's
+// session.
+interface BiletixEventDetail {
+  eventDescription?: string;
+  info?: string; // HTML: door-opening time, event rules, etc.
+}
+interface BiletixPerformance {
+  performanceDate: number; // epoch ms
+  minPrice?: number; // kuruş (TL * 100)
+}
+
+const eventDetailCache = new Map<string, BiletixEventDetail | null>();
+const performanceCache = new Map<string, BiletixPerformance[]>();
+
+async function fetchJson<T>(url: string): Promise<T | null> {
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, Accept: "application/json" } });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { status?: string; data?: T };
+    return body.status === "SUCCESS" ? (body.data ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchEventDetail(eventCode: string): Promise<BiletixEventDetail | null> {
+  const cached = eventDetailCache.get(eventCode);
+  if (cached !== undefined) return cached;
+  const detail = await fetchJson<BiletixEventDetail>(
+    `https://www.biletix.com/wbtxapi/api/v1/bxcached/event/getEventDetail/${eventCode}/INTERNET/tr`,
+  );
+  eventDetailCache.set(eventCode, detail);
+  return detail;
+}
+
+async function fetchPerformances(eventCode: string): Promise<BiletixPerformance[]> {
+  const cached = performanceCache.get(eventCode);
+  if (cached) return cached;
+  const list =
+    (await fetchJson<BiletixPerformance[]>(
+      `https://www.biletix.com/wbtxapi/api/v1/bxcached/event/getPerformanceList/${eventCode}/INTERNET/tr`,
+    )) ?? [];
+  performanceCache.set(eventCode, list);
+  return list;
 }
 
 interface BiletixDoc {
@@ -137,17 +189,39 @@ async function fetchAndParse(): Promise<ScrapedEventInput[]> {
       const venue = doc.svenue ?? doc.venue?.[0];
       if (!title || !doc.start) continue;
 
+      const startAtMs = new Date(doc.start).getTime();
+      const wasCached = eventDetailCache.has(doc.id) && performanceCache.has(doc.id);
+      const [detail, performances] = await Promise.all([
+        fetchEventDetail(doc.id),
+        fetchPerformances(doc.id),
+      ]);
+
+      // A given eventCode can have performances in several cities/dates
+      // (e.g. a touring show); match to THIS specific Diyarbakır showtime by
+      // epoch, not just by eventCode, so we don't attribute another city's
+      // price to this one.
+      const performance = performances.find(
+        (p) => Math.abs(p.performanceDate - startAtMs) < 60_000,
+      );
+
+      const blurb = doc.description?.[0] ? stripHtml(doc.description[0]) : null;
+      const rules = detail?.info ? stripHtml(detail.info) : null;
+      const description = [blurb, rules].filter(Boolean).join("\n\n") || null;
+
       items.push({
         title: normalizeText(title),
-        description: doc.description?.[0] ? stripHtml(doc.description[0]) : null,
+        description,
         start_at: new Date(doc.start).toISOString(),
         end_at: doc.end && doc.end !== doc.start ? new Date(doc.end).toISOString() : null,
         venue_name: venue ? normalizeText(venue) : null,
         category_name: mapCategory(doc.category),
-        price: null,
+        price: performance?.minPrice != null ? formatPriceTL(performance.minPrice / 100) : null,
         source_url: `https://www.biletix.com/etkinlik/${doc.id}/TURKIYE/tr`,
         image_url: doc.image_url ? `${IMAGE_BASE}${encodeURIComponent(doc.image_url)}` : null,
       });
+
+      // Only pace ourselves on an actual network hit.
+      if (!wasCached) await page.waitForTimeout(300);
     }
 
     return items;
@@ -167,7 +241,14 @@ export async function run(): Promise<ScrapeRunResult> {
     supabase = getSupabaseAdmin();
     cityId = await getDiyarbakirCityId(supabase);
   } catch (err) {
-    console.warn(`[${SOURCE_NAME}] Supabase not configured, skipping upsert:`, (err as Error).message);
+    // Only degrade gracefully for the specific "not configured yet" case —
+    // any other error (wrong project, city row missing, network failure)
+    // must propagate and fail the run loudly. See biletinial.ts's matching
+    // comment for why: this used to make a misconfigured production project
+    // look like a successful, zero-event run in CI.
+    if (!(err instanceof MissingSupabaseConfigError)) throw err;
+
+    console.warn(`[${SOURCE_NAME}] Supabase not configured, skipping upsert:`, err.message);
     for (const item of items) {
       console.warn(`[${SOURCE_NAME}] would upsert: "${item.title}" @ ${item.start_at} (venue: ${item.venue_name})`);
     }

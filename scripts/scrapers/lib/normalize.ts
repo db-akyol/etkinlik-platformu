@@ -13,3 +13,14 @@
 export function normalizeText(input: string): string {
   return input.replace(/\s+/g, " ").trim();
 }
+
+/**
+ * Formats a bare TL amount (e.g. `450`, `2000`) the way the rest of the site
+ * displays prices. Both scraper sources give prices as plain numbers (TL for
+ * biletinial's JSON-LD `offers.price`, kuruş/100 for biletix's `minPrice`) —
+ * this is the one place that turns either into the same `"450 TL"` string
+ * `ScrapedEventInput.price` expects.
+ */
+export function formatPriceTL(amount: number): string {
+  return `${Math.round(amount).toLocaleString("tr-TR")} TL`;
+}

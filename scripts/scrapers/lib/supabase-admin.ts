@@ -82,6 +82,16 @@ type ScraperDatabase = {
 
 export type SupabaseAdminClient = SupabaseClient<ScraperDatabase>;
 
+/**
+ * Thrown ONLY when the required env vars are absent — the one case a caller
+ * should treat as "not set up yet" and degrade gracefully (see
+ * biletinial.ts/biletix.ts's `run()`). Any other failure (bad URL, revoked
+ * key, a query that fails once connected) must NOT be caught the same way —
+ * doing so previously masked a misconfigured production Supabase project as
+ * a clean, zero-event "Success" run in GitHub Actions.
+ */
+export class MissingSupabaseConfigError extends Error {}
+
 let cachedClient: SupabaseAdminClient | null = null;
 
 /**
@@ -100,7 +110,7 @@ export function getSupabaseAdmin(): SupabaseAdminClient {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error(
+    throw new MissingSupabaseConfigError(
       "Missing Supabase env vars for scrapers: NEXT_PUBLIC_SUPABASE_URL and/or " +
         "SUPABASE_SERVICE_ROLE_KEY are not set. Add them to .env.local for local " +
         "runs (see .env.local.example / README), or set them as GitHub Actions " +

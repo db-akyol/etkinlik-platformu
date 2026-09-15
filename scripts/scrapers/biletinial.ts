@@ -20,10 +20,10 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { getSupabaseAdmin } from "./lib/supabase-admin";
+import { getSupabaseAdmin, MissingSupabaseConfigError } from "./lib/supabase-admin";
 import { getDiyarbakirCityId, resolveCategoryId, resolveVenueId } from "./lib/resolve-refs";
 import { upsertScrapedEvent } from "./lib/upsert-event";
-import { normalizeText } from "./lib/normalize";
+import { normalizeText, formatPriceTL } from "./lib/normalize";
 import type { ScrapedEventInput, ScrapeRunResult } from "./lib/types";
 
 const SOURCE_NAME = "biletinial.com (Diyarbakır)";
@@ -84,6 +84,57 @@ async function fetchPage(pageNumber: number): Promise<BiletinialResponse> {
   return res.json() as Promise<BiletinialResponse>;
 }
 
+// The list endpoint (`GetAllEventsByCity`) only gives title/venue/date/image —
+// no price or description. Each event's own detail page embeds the full data
+// (every seance of that title, across every city/date it plays) as a
+// schema.org `Event[]` JSON-LD block, which we already fetch a detail page
+// per unique event URL for anyway, so this piggybacks on that rather than
+// adding a second per-event request. Keyed/cached by detail URL since the
+// same play running several Diyarbakır dates shares one detail page.
+interface BiletinialOffer {
+  price?: number;
+  priceCurrency?: string;
+}
+interface BiletinialLdEvent {
+  description?: string;
+  startDate?: string;
+  endDate?: string;
+  offers?: BiletinialOffer;
+}
+
+const detailCache = new Map<string, BiletinialLdEvent[]>();
+
+async function fetchEventDetails(detailUrl: string): Promise<BiletinialLdEvent[]> {
+  const cached = detailCache.get(detailUrl);
+  if (cached) return cached;
+
+  try {
+    const res = await fetch(detailUrl, {
+      headers: { "User-Agent": USER_AGENT, Accept: "text/html" },
+    });
+    if (!res.ok) {
+      detailCache.set(detailUrl, []);
+      return [];
+    }
+
+    const html = await res.text();
+    const match = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+    if (!match) {
+      detailCache.set(detailUrl, []);
+      return [];
+    }
+
+    const parsed = JSON.parse(match[1]) as BiletinialLdEvent | BiletinialLdEvent[];
+    const entries = Array.isArray(parsed) ? parsed : [parsed];
+    detailCache.set(detailUrl, entries);
+    return entries;
+  } catch (err) {
+    console.warn(`[${SOURCE_NAME}] failed to fetch/parse detail page ${detailUrl}:`, err);
+    detailCache.set(detailUrl, []);
+    return [];
+  }
+}
+
 async function fetchAndParse(): Promise<ScrapedEventInput[]> {
   const items: ScrapedEventInput[] = [];
   let pageNumber = 1;
@@ -96,18 +147,33 @@ async function fetchAndParse(): Promise<ScrapedEventInput[]> {
       if (!raw.etkinlik || !raw.SeanceDate) continue;
 
       const detailUrl = `https://biletinial.com/tr-tr/${raw.tipForUrl}/${raw.url}`;
+      const wasCached = detailCache.has(detailUrl);
+      const ldEntries = await fetchEventDetails(detailUrl);
+      // `raw.SeanceDate` ("2026-09-18T20:00:00", no offset) is this seance's
+      // local wall-clock time; the detail page's JSON-LD carries the same
+      // wall-clock time with an explicit "+03:00" suffix, so a plain prefix
+      // match picks out the entry for THIS seance among the play's other
+      // dates/cities.
+      const match = ldEntries.find((e) => e.startDate?.startsWith(raw.SeanceDate));
 
       items.push({
         title: normalizeText(raw.etkinlik),
-        description: null, // the list endpoint doesn't include one; not worth a per-event detail fetch for the MVP
+        description: match?.description ? normalizeText(match.description) : null,
         start_at: new Date(raw.SeanceDate).toISOString(),
-        end_at: null,
+        end_at: match?.endDate ? new Date(match.endDate).toISOString() : null,
         venue_name: raw.mekan ? normalizeText(raw.mekan) : null,
         category_name: mapCategory(raw.tip),
-        price: null,
+        price:
+          match?.offers?.price != null && match.offers.priceCurrency === "TRY"
+            ? formatPriceTL(match.offers.price)
+            : null,
         source_url: detailUrl,
         image_url: raw.pic ? `${CDN_BASE}${raw.pic}` : null,
       });
+
+      // Only pace ourselves on an actual network hit — a cache hit (same play,
+      // another Diyarbakır date) costs the target site nothing extra.
+      if (!wasCached) await new Promise((r) => setTimeout(r, 300));
     }
 
     if (!page.HasMore) break;
@@ -132,10 +198,16 @@ export async function run(): Promise<ScrapeRunResult> {
     supabase = getSupabaseAdmin();
     cityId = await getDiyarbakirCityId(supabase);
   } catch (err) {
-    // Expected when .env.local/CI secrets aren't configured yet — log what
-    // would have happened instead of crashing, so `fetchAndParse` can still
-    // be exercised/tested standalone.
-    console.warn(`[${SOURCE_NAME}] Supabase not configured, skipping upsert:`, (err as Error).message);
+    // Only degrade gracefully for the specific "not configured yet" case
+    // (e.g. a fresh checkout with no .env.local) — that's expected and lets
+    // `fetchAndParse` still be exercised/tested standalone. Any OTHER error
+    // (wrong project, city row missing, network failure, etc.) must propagate
+    // and fail the run loudly: swallowing it here previously made a
+    // misconfigured production Supabase project look like a successful,
+    // zero-event run in CI (found=85 upserted=0 errors=0, exit 0).
+    if (!(err instanceof MissingSupabaseConfigError)) throw err;
+
+    console.warn(`[${SOURCE_NAME}] Supabase not configured, skipping upsert:`, err.message);
     for (const item of items) {
       console.warn(`[${SOURCE_NAME}] would upsert: "${item.title}" @ ${item.start_at} (venue: ${item.venue_name})`);
     }
