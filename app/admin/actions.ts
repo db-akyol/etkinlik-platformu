@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { istanbulLocalToUtcIso } from "@/lib/istanbul-time";
 import type { EventRow, Venue } from "@/lib/supabase/types";
 
 // NOTE: lib/supabase/types.ts's `Database` type is missing the `Relationships`
@@ -70,8 +71,8 @@ function parseEventForm(formData: FormData): ParsedEventFields {
   return {
     title: readField(formData, "title"),
     description: readField(formData, "description") || null,
-    start_at: startAtRaw ? new Date(startAtRaw).toISOString() : "",
-    end_at: endAtRaw ? new Date(endAtRaw).toISOString() : null,
+    start_at: startAtRaw ? istanbulLocalToUtcIso(startAtRaw) : "",
+    end_at: endAtRaw ? istanbulLocalToUtcIso(endAtRaw) : null,
     venue_id: readField(formData, "venue_id") || null,
     category_id: readField(formData, "category_id") || null,
     price: readField(formData, "price") || null,

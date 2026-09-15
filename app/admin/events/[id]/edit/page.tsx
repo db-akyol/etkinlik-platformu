@@ -1,20 +1,8 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { utcIsoToIstanbulLocal } from "@/lib/istanbul-time";
 import type { Category, EventRow, Venue } from "@/lib/supabase/types";
 import { updateEvent } from "../../../actions";
-
-function toDatetimeLocal(iso: string | null): string {
-  if (!iso) return "";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const year = date.getFullYear();
-  const month = pad(date.getMonth() + 1);
-  const day = pad(date.getDate());
-  const hours = pad(date.getHours());
-  const minutes = pad(date.getMinutes());
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
 
 export default async function EditEventPage({
   params,
@@ -84,7 +72,7 @@ export default async function EditEventPage({
             name="start_at"
             type="datetime-local"
             required
-            defaultValue={toDatetimeLocal(event.start_at)}
+            defaultValue={utcIsoToIstanbulLocal(event.start_at)}
             className="rounded-md border border-black/20 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/40"
           />
         </div>
@@ -97,7 +85,7 @@ export default async function EditEventPage({
             id="end_at"
             name="end_at"
             type="datetime-local"
-            defaultValue={toDatetimeLocal(event.end_at)}
+            defaultValue={utcIsoToIstanbulLocal(event.end_at)}
             className="rounded-md border border-black/20 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/40"
           />
         </div>

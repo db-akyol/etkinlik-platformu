@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 import { getSupabaseAdmin, MissingSupabaseConfigError } from "./lib/supabase-admin";
 import { getDiyarbakirCityId, resolveCategoryId, resolveVenueId } from "./lib/resolve-refs";
 import { upsertScrapedEvent } from "./lib/upsert-event";
-import { normalizeText, formatPriceTL } from "./lib/normalize";
+import { normalizeText, formatPriceTL, parseIstanbulLocalTime } from "./lib/normalize";
 import type { ScrapedEventInput, ScrapeRunResult } from "./lib/types";
 
 const SOURCE_NAME = "biletinial.com (Diyarbakır)";
@@ -159,7 +159,7 @@ async function fetchAndParse(): Promise<ScrapedEventInput[]> {
       items.push({
         title: normalizeText(raw.etkinlik),
         description: match?.description ? normalizeText(match.description) : null,
-        start_at: new Date(raw.SeanceDate).toISOString(),
+        start_at: parseIstanbulLocalTime(raw.SeanceDate),
         end_at: match?.endDate ? new Date(match.endDate).toISOString() : null,
         venue_name: raw.mekan ? normalizeText(raw.mekan) : null,
         category_name: mapCategory(raw.tip),

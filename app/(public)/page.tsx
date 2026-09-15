@@ -3,6 +3,7 @@ import EventCard, { formatEventDateTime, type EventWithRelations } from "@/compo
 import EventMap, { type MapMarker } from "@/components/EventMap";
 import FilterBar from "@/components/FilterBar";
 import { createClient } from "@/lib/supabase/server";
+import { istanbulLocalToUtcIso, istanbulTodayDateString } from "@/lib/istanbul-time";
 import type { Category, City } from "@/lib/supabase/types";
 
 // Keep this in sync with EventWithRelations in components/EventCard.tsx.
@@ -15,8 +16,10 @@ type SearchParams = { [key: string]: string | string[] | undefined };
 function getDateRange(tarih?: string): { gte?: string; lt?: string } {
   if (!tarih) return {};
 
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // Midnight today in Istanbul, expressed as a correct UTC instant — see
+  // lib/istanbul-time.ts for why the naive `new Date(y, m, d)` version was
+  // wrong for part of every day.
+  const startOfToday = new Date(istanbulLocalToUtcIso(`${istanbulTodayDateString()}T00:00`));
 
   const end = new Date(startOfToday);
   if (tarih === "bugun") {
