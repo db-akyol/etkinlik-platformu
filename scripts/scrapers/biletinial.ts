@@ -102,7 +102,65 @@ interface BiletinialLdEvent {
   offers?: BiletinialOffer;
 }
 
-const detailCache = new Map<string, BiletinialLdEvent[]>();
+interface BiletinialDetailPage {
+  ldEntries: BiletinialLdEvent[];
+  /** Full, untruncated description scraped straight from the rendered page
+   *  body (see `extractFullDescription`) — preferred over the JSON-LD
+   *  `description` field, which biletinial itself hard-truncates at exactly
+   *  500 characters (mid-word) for SEO purposes. Null if that container
+   *  wasn't found (falls back to the JSON-LD description at the call site). */
+  fullDescription: string | null;
+}
+
+const detailCache = new Map<string, BiletinialDetailPage>();
+
+// biletinial's schema.org JSON-LD `description` is capped at 500 chars —
+// fine for a search-result snippet, not for what we want to show users. The
+// full text lives in the page body instead, in a `div` with this class
+// (confirmed the same across categories: tiyatro AND müzik pages both use
+// it, despite the leftover "cinema" naming suggesting a shared template).
+const DESCRIPTION_CONTAINER_CLASS = "yds_cinema_movie_thread_info";
+
+/**
+ * Extracts the inner HTML of the first `<div class="...">` matching
+ * `className`, using manual `<div>`/`</div>` depth counting rather than a
+ * regex — the container has nested `<div>`s elsewhere on the page, and a
+ * naive `[\s\S]*?</div>` would stop at the FIRST nested close tag instead
+ * of the container's own.
+ */
+function extractDivByClass(html: string, className: string): string | null {
+  const classIdx = html.indexOf(`class="${className}"`);
+  if (classIdx < 0) return null;
+
+  const divStart = html.lastIndexOf("<div", classIdx);
+  const openTagEnd = html.indexOf(">", classIdx);
+  if (divStart < 0 || openTagEnd < 0) return null;
+
+  let depth = 1;
+  let i = openTagEnd + 1;
+  while (i < html.length) {
+    const nextOpen = html.indexOf("<div", i);
+    const nextClose = html.indexOf("</div>", i);
+    if (nextClose < 0) return null; // malformed/truncated HTML
+
+    if (nextOpen >= 0 && nextOpen < nextClose) {
+      depth++;
+      i = nextOpen + 4;
+    } else {
+      depth--;
+      if (depth === 0) return html.slice(openTagEnd + 1, nextClose);
+      i = nextClose + 6;
+    }
+  }
+  return null;
+}
+
+function extractFullDescription(html: string): string | null {
+  const inner = extractDivByClass(html, DESCRIPTION_CONTAINER_CLASS);
+  if (!inner) return null;
+  const text = normalizeText(inner.replace(/<[^>]+>/g, " "));
+  return text || null;
+}
 
 /**
  * Counts of how detail-page enrichment (price/description/end time) went,
@@ -120,7 +178,9 @@ const detailCache = new Map<string, BiletinialLdEvent[]>();
 let detailFetchFailed = 0;
 let detailNoMatch = 0;
 
-async function fetchEventDetails(detailUrl: string): Promise<BiletinialLdEvent[]> {
+const EMPTY_DETAIL_PAGE: BiletinialDetailPage = { ldEntries: [], fullDescription: null };
+
+async function fetchEventDetails(detailUrl: string): Promise<BiletinialDetailPage> {
   const cached = detailCache.get(detailUrl);
   if (cached) return cached;
 
@@ -131,28 +191,32 @@ async function fetchEventDetails(detailUrl: string): Promise<BiletinialLdEvent[]
     if (!res.ok) {
       console.warn(`[${SOURCE_NAME}] detail page HTTP ${res.status} for ${detailUrl}`);
       detailFetchFailed++;
-      detailCache.set(detailUrl, []);
-      return [];
+      detailCache.set(detailUrl, EMPTY_DETAIL_PAGE);
+      return EMPTY_DETAIL_PAGE;
     }
 
     const html = await res.text();
+    const fullDescription = extractFullDescription(html);
+
     const match = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
     if (!match) {
       console.warn(`[${SOURCE_NAME}] no JSON-LD block found on detail page ${detailUrl}`);
       detailFetchFailed++;
-      detailCache.set(detailUrl, []);
-      return [];
+      const result: BiletinialDetailPage = { ldEntries: [], fullDescription };
+      detailCache.set(detailUrl, result);
+      return result;
     }
 
     const parsed = JSON.parse(match[1]) as BiletinialLdEvent | BiletinialLdEvent[];
-    const entries = Array.isArray(parsed) ? parsed : [parsed];
-    detailCache.set(detailUrl, entries);
-    return entries;
+    const ldEntries = Array.isArray(parsed) ? parsed : [parsed];
+    const result: BiletinialDetailPage = { ldEntries, fullDescription };
+    detailCache.set(detailUrl, result);
+    return result;
   } catch (err) {
     console.warn(`[${SOURCE_NAME}] failed to fetch/parse detail page ${detailUrl}:`, err);
     detailFetchFailed++;
-    detailCache.set(detailUrl, []);
-    return [];
+    detailCache.set(detailUrl, EMPTY_DETAIL_PAGE);
+    return EMPTY_DETAIL_PAGE;
   }
 }
 
@@ -169,7 +233,7 @@ async function fetchAndParse(): Promise<ScrapedEventInput[]> {
 
       const detailUrl = `https://biletinial.com/tr-tr/${raw.tipForUrl}/${raw.url}`;
       const wasCached = detailCache.has(detailUrl);
-      const ldEntries = await fetchEventDetails(detailUrl);
+      const { ldEntries, fullDescription } = await fetchEventDetails(detailUrl);
       // `raw.SeanceDate` is this seance's local wall-clock time, sometimes
       // WITH a spurious trailing "Z" (see normalize.ts) — the detail page's
       // JSON-LD always carries the same wall-clock time with an explicit
@@ -181,15 +245,23 @@ async function fetchAndParse(): Promise<ScrapedEventInput[]> {
       const match = ldEntries.find((e) => e.startDate?.startsWith(seanceWallClock));
       if (!match && ldEntries.length > 0) {
         // The detail page fetched fine but none of its JSON-LD entries'
-        // startDate matched this seance's SeanceDate — a real (if rarer)
-        // failure mode distinct from the page not loading at all, worth
-        // telling apart in the summary below.
+        // startDate matched this seance's SeanceDate (their JSON-LD only
+        // lists the next ~10 performances — a far-future date genuinely
+        // isn't in there yet) — a real (if rarer) failure mode distinct
+        // from the page not loading at all, worth telling apart below.
+        // Note this only costs price/end_at: the description below isn't
+        // session-specific, so it's still available either way.
         detailNoMatch++;
       }
 
       items.push({
         title: normalizeText(raw.etkinlik),
-        description: match?.description ? normalizeText(match.description) : null,
+        // Prefer the full page-body text over JSON-LD's `description` —
+        // biletinial truncates THAT at exactly 500 characters mid-word for
+        // SEO purposes (confirmed on the live site), which is fine for a
+        // search snippet but not for what we show users. Same for every
+        // session of a given play, so this doesn't depend on `match`.
+        description: fullDescription ?? (match?.description ? normalizeText(match.description) : null),
         start_at: parseIstanbulLocalTime(raw.SeanceDate),
         end_at: match?.endDate ? new Date(match.endDate).toISOString() : null,
         venue_name: raw.mekan ? normalizeText(raw.mekan) : null,
