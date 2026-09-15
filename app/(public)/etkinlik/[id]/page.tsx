@@ -7,6 +7,7 @@ import {
   type EventWithRelations,
 } from "@/components/EventCard";
 import EventMap from "@/components/EventMap";
+import FavoriteButton from "@/components/FavoriteButton";
 import { createClient } from "@/lib/supabase/server";
 
 // Keep this in sync with EventWithRelations in components/EventCard.tsx.
@@ -66,6 +67,22 @@ export default async function EventDetailPage({
     notFound();
   }
 
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let isFavorited = false;
+  if (user) {
+    const { data: favorite } = await supabase
+      .from("favorites")
+      .select("event_id")
+      .eq("user_id", user.id)
+      .eq("event_id", event.id)
+      .returns<{ event_id: string }[]>();
+    isFavorited = (favorite?.length ?? 0) > 0;
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
       <Link
@@ -103,6 +120,12 @@ export default async function EventDetailPage({
             <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
               {formatEventPrice(event.price)}
             </span>
+            <FavoriteButton
+              eventId={event.id}
+              initialFavorited={isFavorited}
+              isLoggedIn={!!user}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-black/10 text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-white/10 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            />
           </div>
 
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 sm:text-3xl">

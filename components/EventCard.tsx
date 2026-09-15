@@ -1,4 +1,5 @@
 import Link from "next/link";
+import FavoriteButton from "@/components/FavoriteButton";
 import type { Category, EventRow, Venue } from "@/lib/supabase/types";
 
 /**
@@ -33,13 +34,28 @@ export function formatEventPrice(price: string | null): string {
   return price;
 }
 
-export default function EventCard({ event }: { event: EventWithRelations }) {
+export default function EventCard({
+  event,
+  isLoggedIn = false,
+  isFavorited = false,
+}: {
+  event: EventWithRelations;
+  isLoggedIn?: boolean;
+  isFavorited?: boolean;
+}) {
   return (
     <Link
       href={`/etkinlik/${event.id}`}
       className="group flex flex-col overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm transition-shadow hover:shadow-md dark:border-white/10 dark:bg-zinc-900"
     >
       <div className="relative aspect-[16/9] w-full overflow-hidden bg-zinc-200 dark:bg-zinc-800">
+        <div className="absolute right-3 top-3 z-10">
+          <FavoriteButton
+            eventId={event.id}
+            initialFavorited={isFavorited}
+            isLoggedIn={isLoggedIn}
+          />
+        </div>
         {event.image_url ? (
           // Using a plain img keeps this component free of next.config.ts
           // remote-image-domain configuration, which is owned elsewhere.

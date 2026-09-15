@@ -53,6 +53,18 @@ export interface ScrapeSource {
   is_active: boolean;
 }
 
+/** Membership-only table: rows are managed by hand (SQL editor/service role). */
+export interface AdminUser {
+  id: string;
+  created_at: string;
+}
+
+export interface Favorite {
+  user_id: string;
+  event_id: string;
+  created_at: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -72,6 +84,16 @@ export interface Database {
         Row: ScrapeSource;
         Insert: Partial<ScrapeSource>;
         Update: Partial<ScrapeSource>;
+      };
+      admin_users: {
+        Row: AdminUser;
+        Insert: Partial<AdminUser>;
+        Update: Partial<AdminUser>;
+      };
+      favorites: {
+        Row: Favorite;
+        Insert: Partial<Favorite>;
+        Update: Partial<Favorite>;
       };
     };
   };

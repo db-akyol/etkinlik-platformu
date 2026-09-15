@@ -45,7 +45,11 @@ export default async function Home({
 
   const supabase = await createClient();
 
-  const [{ data: activeCity }, { data: categories }] = await Promise.all([
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const [{ data: activeCity }, { data: categories }, { data: favoriteRows }] = await Promise.all([
     supabase
       .from("cities")
       .select<"id, name", Pick<City, "id" | "name">>("id, name")
@@ -56,7 +60,16 @@ export default async function Home({
       .from("categories")
       .select<"id, name, slug", Category>("id, name, slug")
       .order("name", { ascending: true }),
+    user
+      ? supabase
+          .from("favorites")
+          .select("event_id")
+          .eq("user_id", user.id)
+          .returns<{ event_id: string }[]>()
+      : Promise.resolve({ data: null }),
   ]);
+
+  const favoriteEventIds = new Set((favoriteRows ?? []).map((row) => row.event_id));
 
   let events: EventWithRelations[] = [];
 
@@ -131,7 +144,12 @@ export default async function Home({
       ) : (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {events.map((event) => (
-            <EventCard key={event.id} event={event} />
+            <EventCard
+              key={event.id}
+              event={event}
+              isLoggedIn={!!user}
+              isFavorited={favoriteEventIds.has(event.id)}
+            />
           ))}
         </div>
       )}
