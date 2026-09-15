@@ -39,6 +39,7 @@ export default async function Home({
   const params = await searchParams;
   const kategori = typeof params.kategori === "string" ? params.kategori : undefined;
   const tarih = typeof params.tarih === "string" ? params.tarih : undefined;
+  const q = typeof params.q === "string" ? params.q.trim() : undefined;
 
   const supabase = await createClient();
 
@@ -75,6 +76,15 @@ export default async function Home({
 
     if (kategori) {
       events = events.filter((event) => event.category?.slug === kategori);
+    }
+
+    if (q) {
+      const needle = q.toLocaleLowerCase("tr-TR");
+      events = events.filter((event) =>
+        [event.title, event.description, event.venue?.name]
+          .filter(Boolean)
+          .some((field) => field!.toLocaleLowerCase("tr-TR").includes(needle)),
+      );
     }
   }
 
