@@ -238,6 +238,21 @@ export function itemToEvents(item: BelediyeItem): ScrapedEventInput[] {
   ];
 }
 
+/**
+ * How the listing broke down this run, so that a `found=0` summary can say
+ * WHY it was zero.
+ *
+ * This source legitimately reports zero quite often — as of 2026-09-15 every
+ * one of the 16 events it lists is from March–June, i.e. the municipality
+ * simply hasn't published anything upcoming. That's correct behaviour, but
+ * in a CI log it is indistinguishable from the page structure having changed
+ * under us and extraction silently yielding nothing, which is the exact
+ * failure mode that went unnoticed for a while on biletinial. So: report the
+ * raw item count alongside the filtered one.
+ */
+let rawItemsSeen = 0;
+let pastEventsDropped = 0;
+
 async function fetchAndParse(): Promise<ScrapedEventInput[]> {
   const items: ScrapedEventInput[] = [];
   let pageNumber = 1;
@@ -248,13 +263,18 @@ async function fetchAndParse(): Promise<ScrapedEventInput[]> {
 
     for (const raw of pageItems) {
       if (!raw.title) continue;
+      rawItemsSeen++;
+
       // Unlike the ticket vendors (which only ever list shows still on
       // sale), this listing includes events that have already happened —
       // confirmed against a live scrape where every one of 62 items was in
       // the past. The listing isn't in guaranteed chronological order (it
       // looks closer to "most recently published"), so this can't be turned
       // into an early pagination cutoff — just drop anything already over.
-      items.push(...itemToEvents(raw).filter((e) => new Date(e.start_at).getTime() >= Date.now()));
+      const events = itemToEvents(raw);
+      const upcoming = events.filter((e) => new Date(e.start_at).getTime() >= Date.now());
+      pastEventsDropped += events.length - upcoming.length;
+      items.push(...upcoming);
     }
 
     pageNumber++;
@@ -266,9 +286,21 @@ async function fetchAndParse(): Promise<ScrapedEventInput[]> {
 }
 
 export async function run(): Promise<ScrapeRunResult> {
+  rawItemsSeen = 0;
+  pastEventsDropped = 0;
+
   console.log(`[${SOURCE_NAME}] fetching event pages...`);
   const items = await fetchAndParse();
   console.log(`[${SOURCE_NAME}] parsed ${items.length} item(s).`);
+  console.log(
+    `[${SOURCE_NAME}] listing breakdown: ${rawItemsSeen} event(s) on the page, ` +
+      `${pastEventsDropped} session(s) dropped as already past, ${items.length} upcoming.` +
+      (rawItemsSeen === 0
+        ? " — zero events on the page at all, which usually means extraction broke rather than the calendar being empty; check the page structure."
+        : items.length === 0
+          ? " — the municipality has nothing upcoming published right now; this is normal, not a parsing failure."
+          : ""),
+  );
 
   let supabase;
   let cityId: string;
