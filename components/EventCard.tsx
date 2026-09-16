@@ -1,6 +1,6 @@
 import Link from "next/link";
 import FavoriteButton from "@/components/FavoriteButton";
-import { formatEventDateTime, formatEventPrice } from "@/lib/format-event";
+import { formatEventBadge, formatEventDateTime, formatEventPrice } from "@/lib/format-event";
 import type { Category, EventRow, Venue } from "@/lib/supabase/types";
 
 /**
@@ -22,6 +22,9 @@ export default function EventCard({
   isLoggedIn?: boolean;
   isFavorited?: boolean;
 }) {
+  const badge = formatEventBadge(event.start_at);
+  const isFree = !event.price || event.price.trim() === "";
+
   return (
     <Link
       href={`/etkinlik/${event.id}`}
@@ -42,11 +45,13 @@ export default function EventCard({
           <img
             src={event.image_url}
             alt={event.title}
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600 text-center">
-            <span className="px-4 text-sm font-medium text-white/90">
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-zinc-100 to-zinc-200 text-center dark:from-zinc-800 dark:to-zinc-900">
+            <span className="px-4 text-sm font-medium text-zinc-500 dark:text-zinc-400">
               {event.category?.name ?? "Etkinlik"}
             </span>
           </div>
@@ -56,6 +61,13 @@ export default function EventCard({
             {event.category.name}
           </span>
         )}
+        <span
+          className={`absolute bottom-3 left-3 rounded-full px-2.5 py-1 text-xs font-medium ${
+            badge.soon ? "bg-indigo-600 text-white" : "bg-black/70 text-white"
+          }`}
+        >
+          {badge.text}
+        </span>
       </div>
       <div className="flex flex-1 flex-col gap-2 p-4">
         <h3 className="line-clamp-2 text-base font-semibold text-zinc-900 dark:text-zinc-50">
@@ -70,7 +82,13 @@ export default function EventCard({
           </p>
         )}
         <div className="mt-auto pt-2">
-          <span className="inline-block rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+          <span
+            className={`inline-block rounded-full px-3 py-1 text-xs font-medium ${
+              isFree
+                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+                : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+            }`}
+          >
             {formatEventPrice(event.price)}
           </span>
         </div>

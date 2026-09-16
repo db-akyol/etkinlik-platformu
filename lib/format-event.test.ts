@@ -7,7 +7,7 @@ process.env.TZ = "America/New_York";
 import assert from "node:assert/strict";
 import test, { describe } from "node:test";
 
-import { formatEventDateTime, formatEventPrice } from "./format-event";
+import { formatEventBadge, formatEventDateTime, formatEventPrice } from "./format-event";
 
 describe("formatEventDateTime", () => {
   test("renders a stored UTC instant as Turkey local time", () => {
@@ -43,6 +43,55 @@ describe("formatEventDateTime", () => {
 
   test("pads single-digit hours", () => {
     assert.equal(formatEventDateTime("2026-09-18T06:00:00.000Z"), "18 Eylül 2026, 09:00");
+  });
+});
+
+describe("formatEventBadge", () => {
+  // 10:00 UTC on the 18th = 13:00 Istanbul, safely mid-afternoon there.
+  const now = new Date("2026-09-18T10:00:00.000Z");
+
+  test("labels an event later the same Istanbul day as 'Bugün'", () => {
+    assert.deepEqual(formatEventBadge("2026-09-18T17:00:00.000Z", now), {
+      text: "Bugün 20:00",
+      soon: true,
+    });
+  });
+
+  test("labels the next Istanbul day as 'Yarın'", () => {
+    assert.deepEqual(formatEventBadge("2026-09-19T17:00:00.000Z", now), {
+      text: "Yarın 20:00",
+      soon: true,
+    });
+  });
+
+  test("falls back to a short day/month for anything further out", () => {
+    assert.deepEqual(formatEventBadge("2026-09-24T17:00:00.000Z", now), {
+      text: "24 Eyl 20:00",
+      soon: false,
+    });
+  });
+
+  test("counts an after-midnight Istanbul event as its own local day", () => {
+    // 22:00 UTC on the 18th is 01:00 on the 19th in Istanbul: "Yarın", not
+    // "Bugün". Comparing UTC dates instead would get this backwards.
+    assert.deepEqual(formatEventBadge("2026-09-18T22:00:00.000Z", now), {
+      text: "Yarın 01:00",
+      soon: true,
+    });
+  });
+
+  test("uses Istanbul's calendar day for 'now' as well", () => {
+    // 22:00 UTC on the 18th is already the 19th in Istanbul, so an event at
+    // 20:00 Istanbul on the 19th is "Bugün" for a visitor there.
+    const lateNight = new Date("2026-09-18T22:00:00.000Z");
+    assert.deepEqual(formatEventBadge("2026-09-19T17:00:00.000Z", lateNight), {
+      text: "Bugün 20:00",
+      soon: true,
+    });
+  });
+
+  test("renders midnight as 00:00, not 24:00", () => {
+    assert.equal(formatEventBadge("2026-09-25T21:00:00.000Z", now).text, "26 Eyl 00:00");
   });
 });
 

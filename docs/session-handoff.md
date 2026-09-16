@@ -27,7 +27,7 @@ manuel giriş sadece ulaşılamayan etkinlikler için yedektir.
   - `biletix.com` — ~32 etkinlik/çalıştırma
   - `diyarbakir.bel.tr` (Büyükşehir Belediyesi) — şu an 0 (aşağıya bakın)
 - **PWA katmanı** — manifest, service worker, offline sayfası.
-- **Test + CI** — `npm test` (112 test, ağ/DB gerektirmez) ve her push'ta
+- **Test + CI** — `npm test` (125 test, ağ/DB gerektirmez) ve her push'ta
   typecheck + lint + test çalıştıran `.github/workflows/ci.yml`.
 
 ## Mimari notlar
@@ -67,6 +67,12 @@ saat olarak patladı:
 Bunların hepsi testlerle sabitlendi ve testler bilerek **Türkiye olmayan,
 DST uygulayan** bir saat diliminde (`America/New_York`) koşuyor — böylece
 bir regresyon production'da değil, test çıktısında görünüyor.
+
+Aynı tuzak "bugün mü" karşılaştırmalarında da geçerli: kartlardaki
+"Bugün/Yarın" rozetini üreten `formatEventBadge` (`lib/format-event.ts`)
+hem etkinliğin hem de `now`'un **İstanbul takvim gününü** hesaplayıp
+karşılaştırır. UTC tarihlerini karşılaştırmak, İstanbul'da 00:00–03:00
+arasındaki etkinlikleri bir gün yanlış etiketler.
 
 ### 2. Kaynaklar tarih formatı konusunda tutarsız
 
@@ -121,7 +127,7 @@ kaldı). **Bir kaynaktan gelen iki zaman damgasını karşılaştırırken önce
 npx supabase start   # yerel Supabase (Docker Desktop açık olmalı)
 npm run dev          # http://localhost:3000
 
-npm test             # 112 test, ağ ve DB gerektirmez, ~0.5 sn
+npm test             # 125 test, ağ ve DB gerektirmez, ~0.5 sn
 npm run typecheck
 npm run lint
 npm run scrape       # üç scraper'ı da çalıştırır (.env.local'deki DB'ye yazar)
