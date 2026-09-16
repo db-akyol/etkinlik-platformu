@@ -1,11 +1,22 @@
 name: CI
 
-# Typecheck, lint and unit-test on every push and PR.
+# Typecheck, lint, unit-test and build on every push and PR.
 #
 # Vercel already builds on push, but it only reports after a deploy is under
 # way and it doesn't run the test suite at all — this gives a fast, free
 # signal on the parts that have actually broken in the past (the pure
 # date/HTML-parsing helpers under scripts/scrapers and lib/).
+#
+# The build step exists because typecheck/lint/test do NOT catch every way
+# a page can fail to compile — confirmed the hard way on 2026-09-16, when a
+# "use server" file exporting a synchronous function passed typecheck, lint
+# and all 196 tests, but broke `next build` (and therefore every Vercel
+# deploy) for the entire /admin tree. Only `next build`'s server-actions
+# transform catches that class of error. The build uses placeholder
+# Supabase/Anthropic credentials (verified locally to be sufficient — every
+# page that touches Supabase is `force-dynamic` and defers to runtime, none
+# of it runs during static generation), not real secrets, so this step
+# never touches a live project.
 #
 # Deliberately NOT included: a run of the scrapers themselves. Those hit
 # third-party sites and a real Supabase project, so running them per-push
@@ -48,3 +59,13 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          # Placeholder values, not real secrets — see the comment at the
+          # top of this file for why this is safe and what it catches.
+          NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-anon-key"
+          SUPABASE_SERVICE_ROLE_KEY: "placeholder-service-role-key"
+          ANTHROPIC_API_KEY: "placeholder-anthropic-key"
