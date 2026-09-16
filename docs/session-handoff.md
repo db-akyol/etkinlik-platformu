@@ -165,6 +165,16 @@ kaldı). **Bir kaynaktan gelen iki zaman damgasını karşılaştırırken önce
   gerçek mekânı İstanbul) `city/21` (Diyarbakır) altında da döndü.
   `bubilet_fetch.py` artık her mekânın kendi `cityId`'sini kontrol edip
   gerçekten Diyarbakır olmayanları atıyor (`is_actually_diyarbakir`).
+- **Instagram'dan yarı-otomatik etkinlik ekleme eklendi (2026-09-16).**
+  `/admin/etkinlik/instagramdan-ekle` — admin caption metnini yapıştırır,
+  poster görselini yükler; sunucu Instagram'a HİÇBİR istek atmaz. Görsel
+  Supabase Storage'a (`event-images` bucket) yüklenir, Claude Haiku
+  (vision) ile alan çıkarımı yapılır, sonuç mevcut event formuyla
+  önizlenir/düzeltilir, kaydedilince `status: "pending"` olarak eklenir —
+  yayına girmeden önce mevcut `/admin` onay kuyruğundan geçer. Yeni env
+  değişkeni: `ANTHROPIC_API_KEY` (`.env.local` + Vercel; scrape cron'una
+  eklenmedi, bu akış sadece admin panelinde çalışıyor). Detay:
+  `docs/design/instagram-assisted-entry.md`.
 - **PWA ikonları hâlâ placeholder** (turuncu kare + "E").
 - **Web push bildirimleri yok** (plan.md Faz 1'de var, ertelendi).
 - `.env.local` yerel Supabase'i (`127.0.0.1:54321`) gösteriyor. Scraper'ları
