@@ -48,7 +48,7 @@ export async function rejectEvent(id: string) {
   revalidatePath("/admin");
 }
 
-type ParsedEventFields = {
+export type ParsedEventFields = {
   title: string;
   description: string | null;
   start_at: string;
@@ -59,12 +59,12 @@ type ParsedEventFields = {
   image_url: string | null;
 };
 
-function readField(formData: FormData, key: string): string {
+export function readField(formData: FormData, key: string): string {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
 }
 
-function parseEventForm(formData: FormData): ParsedEventFields {
+export function parseEventForm(formData: FormData): ParsedEventFields {
   const startAtRaw = readField(formData, "start_at");
   const endAtRaw = readField(formData, "end_at");
 
@@ -80,7 +80,7 @@ function parseEventForm(formData: FormData): ParsedEventFields {
   };
 }
 
-async function resolveCityId(
+export async function resolveCityId(
   supabase: Awaited<ReturnType<typeof createClient>>,
   venueId: string | null,
 ): Promise<string> {
