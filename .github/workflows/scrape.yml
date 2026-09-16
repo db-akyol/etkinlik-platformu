@@ -37,6 +37,16 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      # bubilet.ts shells out to bubilet_fetch.py (see that file's header for
+      # why one source needs a Python subprocess) — see scripts/scrapers/requirements.txt.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install -r scripts/scrapers/requirements.txt
+
       - name: Run scrapers
         run: npx tsx scripts/scrapers/run-all.ts
         env:

@@ -21,16 +21,8 @@ overall project context.
 - `biletinial.ts` — biletinial.com's Diyarbakır listing, via the same JSON endpoint the city page calls client-side, plus a per-event detail-page fetch for price/description/end time.
 - `biletix.ts` — biletix.com's Diyarbakır search, via Playwright (the Solr endpoint needs the page's own Queue-it session) plus two public `bxcached` JSON APIs for price and event rules.
 - `diyarbakir-belediye.ts` — the municipality's own events page, read out of the Next.js RSC payload embedded in the (robots-allowed) page HTML.
+- `bubilet.ts` — bubilet.com.tr's Diyarbakır listings. **The one exception to this project's "don't build around a source's bot protection" rule** (see below) — the actual HTTP fetching happens in a separate Python subprocess, `bubilet_fetch.py`, using `cloudscraper` to get past bubilet's Cloudflare bot-challenge. This was an explicit, informed decision by the project owner, made after that rule was raised again for this specific case — see `docs/session-handoff.md`. `bubilet.ts` itself only maps the raw JSON that subprocess produces into the normal pipeline; read its header before touching it.
 - `example-hn.ts` — **structural example only**, not a real source. Proves the fetch → parse → normalize → resolve → upsert pipeline against a stable, real, static page (Hacker News' front page). Every row it would write is prefixed `[DEMO]`.
-
-### Not scraped, on purpose
-
-`bubilet.com.tr` sits behind a Cloudflare bot-challenge covering the whole
-site. Getting past that means building detection-evasion tooling against a
-source that has explicitly signalled it doesn't want automated access — so
-neither it nor a third-party service that does the same on our behalf is
-used here. The open paths are an official data-sharing arrangement with
-bubilet, or manual entry.
 
 ## Adding a real parser
 
@@ -54,6 +46,10 @@ Needs `.env.local` with `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KE
 (the service role key, not the anon key — see `lib/supabase-admin.ts`). Without
 it, parsers still fetch/parse fine and log "would upsert: ..." instead of
 crashing.
+
+`bubilet.ts` additionally needs Python 3 on `PATH` (as `python3` or `python`)
+with `pip install -r scripts/scrapers/requirements.txt` run once — see that
+parser's header. Every other parser is plain Node/TypeScript.
 
 In CI: `.github/workflows/scrape.yml` runs `run-all.ts` twice a day and on
 manual dispatch from the Actions tab.
@@ -100,4 +96,4 @@ Two consequences worth remembering:
 - Keep request volume low — the cron runs twice a day, not more; parsers run in sequence, not in parallel, and pace themselves between requests.
 - Prefer an official API/RSS/JSON feed over HTML scraping when a source offers one.
 - Always populate `source_url` so every event links back to its origin.
-- Don't build around a source's bot protection. If a site has actively blocked automated access, the answer is to ask them, not to defeat it.
+- Don't build around a source's bot protection. If a site has actively blocked automated access, the default answer is to ask them, not to defeat it — `bubilet.ts`/`bubilet_fetch.py` is a deliberate, explicit exception the project owner chose to make for that one source (see that section above and `docs/session-handoff.md`), not a precedent to reuse casually for the next blocked source.

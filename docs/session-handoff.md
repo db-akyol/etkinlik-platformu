@@ -5,14 +5,14 @@ ettirebilsin diye. Projenin orijinal planı için
 [`docs/plan.md`](./plan.md); scraper'ların ayrıntısı için
 [`scripts/scrapers/README.md`](../scripts/scrapers/README.md).
 
-**Son güncelleme:** 2026-09-16 — public site'a "Dicle" renk/tipografi
-kimliği ve tarih rozetleri eklendi.
+**Son güncelleme:** 2026-09-16 — bubilet.com.tr 4. kaynak olarak eklendi
+(bkz. "bubilet.com.tr artık scrape ediliyor" notu aşağıda).
 
 ---
 
 ## Tek cümlede
 
-Diyarbakır etkinliklerini üç kaynaktan otomatik toplayan, Vercel'de canlı
+Diyarbakır etkinliklerini dört kaynaktan otomatik toplayan, Vercel'de canlı
 çalışan bir Next.js + Supabase PWA'sı. **Scraper asıl veri kaynağıdır**;
 manuel giriş sadece ulaşılamayan etkinlikler için yedektir.
 
@@ -23,12 +23,14 @@ manuel giriş sadece ulaşılamayan etkinlikler için yedektir.
   favoriler. Sadece `status='approved'` kayıtlar görünür.
 - **Admin panel** (`app/admin/`) — manuel etkinlik ekleme/düzenleme,
   onayla/reddet. `middleware.ts` + `admin_users` allowlist'i ile korunuyor.
-- **Üç gerçek scraper**, günde 2 kez GitHub Actions cron'u ile:
+- **Dört gerçek scraper**, günde 2 kez GitHub Actions cron'u ile:
   - `biletinial.com` — ~85 etkinlik/çalıştırma
   - `biletix.com` — ~32 etkinlik/çalıştırma
   - `diyarbakir.bel.tr` (Büyükşehir Belediyesi) — şu an 0 (aşağıya bakın)
+  - `bubilet.com.tr` — ~59 etkinlik/çalıştırma (Konser/Tiyatro/Atölye/Spor
+    kategorilerinden; Cloudflare bypass gerektiren tek kaynak, aşağıya bakın)
 - **PWA katmanı** — manifest, service worker, offline sayfası.
-- **Test + CI** — `npm test` (125 test, ağ/DB gerektirmez) ve her push'ta
+- **Test + CI** — `npm test` (137 test, ağ/DB gerektirmez) ve her push'ta
   typecheck + lint + test çalıştıran `.github/workflows/ci.yml`.
 
 **Görsel kimlik not:** public site'ta indigo aksan rengi "Dicle" tonuna
@@ -114,12 +116,19 @@ kaldı). **Bir kaynaktan gelen iki zaman damgasını karşılaştırırken önce
   kaynaklı: biletinial'in JSON-LD'si sadece en yakın ~10 seansı listeliyor,
   uzak tarihli bir etkinlik henüz orada değil. Tarih yaklaştıkça kendiliğinden
   düzeliyor. Açıklama metni bundan etkilenmiyor (sayfa gövdesinden alınıyor).
-- **bubilet.com.tr scrape edilmiyor.** Tüm siteyi kapsayan bir Cloudflare bot
-  koruması var. Bunu aşmak, otomatik erişim istemediğini açıkça belirtmiş bir
-  siteye karşı tespit-atlatma aracı yazmak olurdu — aynı şeyi bizim yerimize
-  yapan üçüncü parti bir servis (parse.bot) de aynı sebeple kullanılmadı.
-  Açık yollar: bubilet ile resmi veri paylaşımı anlaşması (taslak e-posta
-  yazıldı, gönderildi mi bilinmiyor) veya manuel giriş.
+- **bubilet.com.tr artık scrape ediliyor — bilinçli bir istisna.** Tüm
+  siteyi kapsayan bir Cloudflare bot koruması var; başta bunu
+  aşmanın "otomatik erişim istemediğini açıkça belirtmiş bir siteye karşı
+  tespit-atlatma aracı yazmak" olacağı gerekçesiyle bilerek yapılmamıştı
+  (parse.bot gibi üçüncü parti servisler de aynı sebeple reddedilmişti).
+  2026-09-16'da proje sahibi bu riski bilerek kabul edip devam etmeyi
+  istedi. Uygulama: `scripts/scrapers/bubilet_fetch.py` (Python,
+  `cloudscraper` ile) Cloudflare'i aşıp ham JSON'u çekiyor,
+  `scripts/scrapers/bubilet.ts` bunu alt süreç olarak çalıştırıp sonucu
+  normal normalize/resolve/upsert boru hattına sokuyor — depodaki **tek**
+  Python bağımlılığı bu. Detaylar ve gerekçe: `bubilet_fetch.py`'nin
+  başlığı ve `scripts/scrapers/README.md`. Bu, bir sonraki engellenmiş
+  kaynak için otomatik bir emsal değil — her seferinde ayrı bir karar.
 - **PWA ikonları hâlâ placeholder** (turuncu kare + "E").
 - **Web push bildirimleri yok** (plan.md Faz 1'de var, ertelendi).
 - `.env.local` yerel Supabase'i (`127.0.0.1:54321`) gösteriyor. Scraper'ları
@@ -135,15 +144,20 @@ kaldı). **Bir kaynaktan gelen iki zaman damgasını karşılaştırırken önce
 npx supabase start   # yerel Supabase (Docker Desktop açık olmalı)
 npm run dev          # http://localhost:3000
 
-npm test             # 125 test, ağ ve DB gerektirmez, ~0.5 sn
+npm test             # 137 test, ağ ve DB gerektirmez, ~0.5 sn
 npm run typecheck
 npm run lint
-npm run scrape       # üç scraper'ı da çalıştırır (.env.local'deki DB'ye yazar)
+npm run scrape       # dört scraper'ı da çalıştırır (.env.local'deki DB'ye yazar)
 ```
 
 > **Not:** `npm run build` çalışırken `npm run dev` açıksa `.next` kilidi
 > yüzünden takılabilir. Ya dev server'ı kapatın ya da build'i Vercel'e
 > bırakın.
+
+> **Not:** `npm run scrape` bubilet için Python 3 + `pip install -r
+> scripts/scrapers/requirements.txt` ister (bkz. `scripts/scrapers/README.md`).
+> Kurulu değilse sadece bubilet parser'ı hata verir, diğer üç kaynak
+> etkilenmez.
 
 Yeni test dosyası eklerseniz `package.json`'daki `scripts.test` listesine de
 ekleyin — Node 20'nin test runner'ı `.ts` dosyalarını glob'layamıyor.
@@ -173,10 +187,14 @@ sürece admin olmazlar.
 
 ## Sırada ne var (öneri)
 
-1. **Daha fazla kaynak.** Asıl hedef bu. Belediye dışındaki kurumlar
-   (üniversiteler, kültür merkezleri, mekânların kendi siteleri) ve
-   plan.md'deki Instagram fikri.
-2. **PWA ikonlarını gerçek marka görseliyle değiştirmek.**
-3. **Web push bildirimleri.**
-4. Bir kaynak sessizce bozulduğunda haber veren bir uyarı mekanizması —
+1. **Daha fazla kaynak.** Asıl hedef bu — bubilet eklendi (bkz. yukarısı),
+   sırada belediye/bubilet dışındaki kurumlar (üniversiteler, kültür
+   merkezleri, mekânların kendi siteleri) ve plan.md'deki Instagram fikri.
+2. **`(title, start_at)` dedup'ının bilinen sınırı** — bubilet'in "X
+   Konseri" gibi başlık ekleri diğer kaynaklarla tam eşleşmeyebilir; canlıda
+   gerçek bir çift kayıt görülürse bu ilk şüphelenilecek yer (bkz.
+   `lib/upsert-event.ts`'nin başlığı).
+3. **PWA ikonlarını gerçek marka görseliyle değiştirmek.**
+4. **Web push bildirimleri.**
+5. Bir kaynak sessizce bozulduğunda haber veren bir uyarı mekanizması —
    şu an bunu ancak CI logunu okuyarak fark ediyoruz.

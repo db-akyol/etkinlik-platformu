@@ -1,0 +1,4 @@
+# Used only by bubilet_fetch.py — see that file's header for why this
+# parser needs Python (and specifically cloudscraper) when every other
+# parser in this directory is plain TypeScript/Node.
+cloudscraper>=1.2.71

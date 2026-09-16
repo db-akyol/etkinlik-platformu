@@ -26,15 +26,8 @@ import { fileURLToPath } from "node:url";
 
 import { run as runBiletinial } from "./biletinial";
 import { run as runBiletix } from "./biletix";
+import { run as runBubilet } from "./bubilet";
 import { run as runDiyarbakirBelediye } from "./diyarbakir-belediye";
-//
-// bubilet.com.tr (a source the project owner asked about) is intentionally
-// NOT scraped: it sits behind a Cloudflare bot-challenge ("Just a moment...")
-// that actively blocks non-interactive requests. Defeating that would mean
-// building detection-evasion tooling against a site that has explicitly
-// signaled it doesn't want automated access — out of scope for this project.
-// A third-party paid "API" (parse.bot's bubilet wrapper) that reportedly
-// does this on our behalf was considered and declined for the same reason.
 import type { ScrapeRunResult } from "./lib/types";
 
 type Parser = () => Promise<ScrapeRunResult>;
@@ -65,6 +58,11 @@ const PARSERS: RegisteredParser[] = [
   // past). Its own log line says which of the two situations produced a
   // zero, since only it can tell them apart.
   { run: runDiyarbakirBelediye, minExpected: 0 },
+  // Observed 2026-09-16: 59 unique events across the 4 category tags
+  // bubilet.ts fetches (43 Konser, 15 Tiyatro, 1 Atölye, 0 Spor that day) —
+  // set well below that so an ordinarily-quiet Spor/Atölye day doesn't trip
+  // this, but a Cloudflare-bypass or page-structure break still does.
+  { run: runBubilet, minExpected: 10 },
 ];
 
 /**
