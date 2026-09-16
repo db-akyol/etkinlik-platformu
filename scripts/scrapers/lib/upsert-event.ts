@@ -68,9 +68,29 @@
  * both a normalized-equal title AND the exact same start_at would collide,
  * but that's the same accepted risk the plain (title, start_at) key already
  * carries, just extended slightly.
+ *
+ * --- Third fallback: same calendar day, different source ------------------
+ *
+ * The `start_at`-bucketed fallback above still missed real duplicates where
+ * two sources report the SAME event at DIFFERENT clock times — confirmed
+ * live on 2026-09-16: "Dedublüman" (biletix) / "Dedublüman Konseri"
+ * (bubilet) 60 minutes apart, "Büyük Afrika Sirki" (biletinial vs. biletix)
+ * 120 minutes apart, several more. Sources disagree about doors-vs-showtime
+ * or just round differently; they don't disagree about the date. So when
+ * the same-start_at fallback also finds nothing, a third query fetches every
+ * row on the same Istanbul calendar day and looks for a fuzzy title match
+ * from a DIFFERENT source_url — see `sameDayCrossSourceMatch` in
+ * normalize.ts for why "different source" is required (a single source's own
+ * page can legitimately list two real same-day sessions, e.g. a matinee and
+ * an evening show, which must NOT collapse into one row).
  */
 import type { EventRow } from "../../../lib/supabase/types";
-import { titlesMatchForDedup } from "./normalize";
+import {
+  istanbulCalendarDate,
+  istanbulCalendarDayRangeUtc,
+  sameDayCrossSourceMatch,
+  titlesMatchForDedup,
+} from "./normalize";
 import type { SupabaseAdminClient } from "./supabase-admin";
 
 export type UpsertScrapedEventInput = Omit<EventRow, "id" | "created_at" | "status">;
@@ -88,6 +108,7 @@ async function findExistingEvent(
   supabase: SupabaseAdminClient,
   title: string,
   startAt: string,
+  sourceUrl: string | null,
 ): Promise<{ id: string } | null | { error: unknown }> {
   const { data: exact, error: exactError } = await supabase
     .from("events")
@@ -107,8 +128,30 @@ async function findExistingEvent(
   if (sameTimeError) return { error: sameTimeError };
 
   const fuzzyMatch = (sameTime ?? []).find((row) => titlesMatchForDedup(title, row.title as string));
+  if (fuzzyMatch) return { id: fuzzyMatch.id as string };
 
-  return fuzzyMatch ? { id: fuzzyMatch.id as string } : null;
+  const day = istanbulCalendarDate(startAt);
+  const { start, end } = istanbulCalendarDayRangeUtc(day);
+  const { data: sameDay, error: sameDayError } = await supabase
+    .from("events")
+    .select("id, title, start_at, source_url")
+    .gte("start_at", start)
+    .lte("start_at", end);
+
+  if (sameDayError) return { error: sameDayError };
+
+  const crossSourceMatch = (sameDay ?? []).find((row) =>
+    sameDayCrossSourceMatch(
+      { title, start_at: startAt, source_url: sourceUrl },
+      {
+        title: row.title as string,
+        start_at: row.start_at as string,
+        source_url: row.source_url as string | null,
+      },
+    ),
+  );
+
+  return crossSourceMatch ? { id: crossSourceMatch.id as string } : null;
 }
 
 export async function upsertScrapedEvent(
@@ -124,7 +167,7 @@ export async function upsertScrapedEvent(
   // Manual select-then-insert-or-update on the same (title, start_at) key
   // events_dedup_idx dedupes on — see the file header for why this doesn't
   // use a DB-level `.upsert()` despite a matching plain index now existing.
-  const existing = await findExistingEvent(supabase, payload.title, payload.start_at);
+  const existing = await findExistingEvent(supabase, payload.title, payload.start_at, payload.source_url);
 
   if (existing && "error" in existing) {
     return { action: "error", error: existing.error };

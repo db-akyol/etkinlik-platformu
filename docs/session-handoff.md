@@ -107,12 +107,28 @@ kaldı). **Bir kaynaktan gelen iki zaman damgasını karşılaştırırken önce
   bu gerçek bir prod bug'ıydı: "Büyük Afrika Sirki" (biletix) vs "Büyük
   Afrika Sirki Oyunu" (bubilet) canlıda iki ayrı kart olarak görünüyordu.
   Detay ve gerekçe: `scripts/scrapers/lib/upsert-event.ts`'nin başlığı.
-  Bu fallback **yeni** satırları korur — o tarihten önce oluşmuş çift
+  **2026-09-16'da ikinci bir fallback daha eklendi:** aynı `start_at`
+  bazlı karşılaştırma bile bazı gerçek çiftleri kaçırıyordu, çünkü
+  kaynaklar aynı etkinliği FARKLI saatlerle bildiriyor (biletix'in
+  "Dedublüman"ı 20:00, bubilet'in "Dedublüman Konseri"si 21:00 — kapı
+  açılışı/gösteri başlangıcı farkı ya da vendor'ların kendi yuvarlaması).
+  Şimdi tam eşleşme + aynı `start_at` fallback'i de bulamazsa, üçüncü bir
+  sorgu aynı İstanbul takvim gününe düşen ve FARKLI bir kaynaktan gelen
+  satırları çekip `sameDayCrossSourceMatch`'le karşılaştırıyor. "Farklı
+  kaynak" şartı kritik: tek bir kaynağın kendi sayfası aynı gün gerçekten
+  iki ayrı seans listeleyebiliyor (matine + akşam, örn. "Alice Harikalar
+  Diyarında") — bunlar birleştirilmemeli. Detay: `lib/normalize.ts`'teki
+  `sameDayCrossSourceMatch`/`istanbulCalendarDate` ve
+  `upsert-event.ts`'nin başlığı.
+  Bu fallback'ler **yeni** satırları korur — o tarihten önce oluşmuş çift
   kayıtlar için `scripts/scrapers/merge-duplicate-events.ts` var (tek
-  seferlik, dry-run varsayılan, `--apply` ile siler; hangi DB'ye bağlıysa
-  `.env.local`/ortam değişkenleri onu temizler — **production'ı temizlemek
-  için o değişkenleri bilerek production'a yönlendirmek gerekiyor**, ayrı
-  bir "prod modu" yok).
+  seferlik, dry-run varsayılan, `--apply` ile siler, artık aynı
+  `sameDayCrossSourceMatch`'i kullanıyor ki ikisi birbirinden sapmasın;
+  hangi DB'ye bağlıysa `.env.local`/ortam değişkenleri onu temizler —
+  **production'ı temizlemek için o değişkenleri bilerek production'a
+  yönlendirmek gerekiyor**, ayrı bir "prod modu" yok). 2026-09-16'da
+  production'da 5 gerçek çift bulundu ve `--apply` ile silindi
+  (134 → 129 etkinlik).
 - Scraped etkinlikler **doğrudan `approved`** olarak giriyor; onay kuyruğu
   kaldırıldı (kaynakların hepsi resmi bilet satıcısı ya da belediyenin
   kendisi). Ama bir admin elle "reddet" derse, sonraki scrape içeriği
@@ -164,7 +180,7 @@ kaldı). **Bir kaynaktan gelen iki zaman damgasını karşılaştırırken önce
 npx supabase start   # yerel Supabase (Docker Desktop açık olmalı)
 npm run dev          # http://localhost:3000
 
-npm test             # 167 test, ağ ve DB gerektirmez, ~0.5 sn
+npm test             # 181 test, ağ ve DB gerektirmez, ~0.5 sn
 npm run typecheck
 npm run lint
 npm run scrape       # dört scraper'ı da çalıştırır (.env.local'deki DB'ye yazar)
@@ -210,12 +226,14 @@ sürece admin olmazlar.
 1. **Daha fazla kaynak.** Asıl hedef bu — bubilet eklendi (bkz. yukarısı),
    sırada belediye/bubilet dışındaki kurumlar (üniversiteler, kültür
    merkezleri, mekânların kendi siteleri) ve plan.md'deki Instagram fikri.
-2. **`(title, start_at)` dedup'ının kalan sınırı** — 2026-09-16'da eklenen
-   normalize edilmiş başlık fallback'i ("Konseri"/"Oyunu" gibi ekleri ve
-   noktalamayı atan eşitlik/içerme kontrolü) bilinen vakaların hepsini
-   çözdü, ama gerçek fuzzy matching (yazım hatası, kelime sırası,
-   çeviri farkı) değil — canlıda yeni bir çift kayıt türü görülürse
-   ilk şüphelenilecek yer `lib/normalize.ts`'teki `titlesMatchForDedup`.
+2. **Dedup'ın kalan sınırı** — 2026-09-16'da eklenen normalize edilmiş
+   başlık fallback'i ("Konseri"/"Oyunu" gibi ekleri ve noktalamayı atan
+   eşitlik/içerme kontrolü) ve aynı gün + farklı kaynak fallback'i
+   (`sameDayCrossSourceMatch`) bilinen vakaların hepsini çözdü, ama gerçek
+   fuzzy matching (yazım hatası, kelime sırası, çeviri farkı) değil ve
+   sadece TEK gün içindeki saat farklarını kapsıyor — canlıda yeni bir
+   çift kayıt türü görülürse ilk şüphelenilecek yer `lib/normalize.ts`'teki
+   `titlesMatchForDedup`/`sameDayCrossSourceMatch`.
 3. **PWA ikonlarını gerçek marka görseliyle değiştirmek.**
 4. **Web push bildirimleri.**
 5. Bir kaynak sessizce bozulduğunda haber veren bir uyarı mekanizması —

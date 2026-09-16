@@ -22,7 +22,7 @@ import type { SupabaseAdminClient } from "./supabase-admin";
 
 interface RecordedCall {
   table: string;
-  op: "select-single" | "select-many" | "insert" | "update";
+  op: "select-single" | "select-many" | "select-range" | "insert" | "update";
   filters: Record<string, unknown>;
   columns?: string;
   payload?: Record<string, unknown>;
@@ -30,20 +30,27 @@ interface RecordedCall {
 
 /**
  * Minimal stand-in for the slice of PostgREST's chainable builder that
- * upsert-event.ts actually uses. Two different `select()` shapes are exercised:
+ * upsert-event.ts actually uses. Three different `select()` shapes are
+ * exercised:
  *
  *   - `.select("id").eq(...).eq(...).maybeSingle()` — the exact-match lookup.
  *   - `.select("id, title").eq("start_at", ...)` awaited directly (no
- *     `.maybeSingle()`) — the fuzzy-fallback lookup, which wants every row at
- *     that timestamp. Real `@supabase/supabase-js` builders are themselves
- *     thenable, so awaiting one without `.maybeSingle()` resolves to
- *     `{ data: [...], error }` — mimicked here via `.then()`.
+ *     `.maybeSingle()`) — the same-start_at fuzzy fallback, which wants every
+ *     row at that timestamp.
+ *   - `.select("id, title, start_at, source_url").gte(...).lte(...)` awaited
+ *     directly — the same-calendar-day, cross-source fallback.
+ *
+ * Real `@supabase/supabase-js` builders are themselves thenable, so awaiting
+ * one without `.maybeSingle()` resolves to `{ data: [...], error }` —
+ * mimicked here via `.then()`.
  */
 function fakeSupabase(opts: {
   existing?: { id: string } | null;
   selectError?: unknown;
   sameTimeRows?: { id: string; title: string }[];
   sameTimeError?: unknown;
+  sameDayRows?: { id: string; title: string; start_at: string; source_url: string | null }[];
+  sameDayError?: unknown;
   insertError?: unknown;
   updateError?: unknown;
 } = {}) {
@@ -52,9 +59,21 @@ function fakeSupabase(opts: {
   const from = (table: string) => ({
     select(columns: string) {
       const filters: Record<string, unknown> = {};
+      // upsert-event.ts's day-range fallback is the only caller that selects
+      // "id, title, start_at, source_url" and filters with .gte()/.lte() —
+      // every other select-many call is the same-start_at fallback.
+      const isDayRange = columns === "id, title, start_at, source_url";
       const builder = {
         eq(column: string, value: unknown) {
           filters[column] = value;
+          return builder;
+        },
+        gte(column: string, value: unknown) {
+          filters[column] = { ...(filters[column] as object), gte: value };
+          return builder;
+        },
+        lte(column: string, value: unknown) {
+          filters[column] = { ...(filters[column] as object), lte: value };
           return builder;
         },
         maybeSingle: async () => {
@@ -62,11 +81,12 @@ function fakeSupabase(opts: {
           return { data: opts.existing ?? null, error: opts.selectError ?? null };
         },
         then(onResolve: (v: { data: unknown; error: unknown }) => unknown, onReject: (e: unknown) => unknown) {
-          calls.push({ table, op: "select-many", filters, columns });
-          return Promise.resolve({
-            data: opts.sameTimeRows ?? [],
-            error: opts.sameTimeError ?? null,
-          }).then(onResolve, onReject);
+          calls.push({ table, op: isDayRange ? "select-range" : "select-many", filters, columns });
+          return Promise.resolve(
+            isDayRange
+              ? { data: opts.sameDayRows ?? [], error: opts.sameDayError ?? null }
+              : { data: opts.sameTimeRows ?? [], error: opts.sameTimeError ?? null },
+          ).then(onResolve, onReject);
         },
       };
       return builder;
@@ -216,6 +236,84 @@ describe("upsertScrapedEvent — fuzzy fallback (worded differently across sourc
 
   test("a failed fallback lookup is reported as an error, not silently inserted", async () => {
     const { client, calls } = fakeSupabase({ existing: null, sameTimeError: { message: "boom" } });
+    const result = await upsertScrapedEvent(client, INPUT);
+
+    assert.equal(result.action, "error");
+    assert.equal(calls.filter((c) => c.op === "insert").length, 0);
+  });
+});
+
+describe("upsertScrapedEvent — cross-source fallback (same day, different clock time)", () => {
+  // Real case, confirmed live on 2026-09-16 AFTER the same-start_at fallback
+  // above already existed: biletix had "Dedublüman" at 20:00 Turkey time,
+  // bubilet scraped the same concert as "Dedublüman Konseri" at 21:00 —
+  // still two cards, because the same-start_at fallback never even looked at
+  // that row.
+  test("finds a match on the same day via a different source when start_at differs", async () => {
+    const { client, calls } = fakeSupabase({
+      existing: null,
+      sameTimeRows: [],
+      sameDayRows: [
+        {
+          id: "existing-uuid",
+          title: "Dedublüman",
+          start_at: "2026-09-18T17:00:00.000Z",
+          source_url: "https://www.biletix.com/etkinlik/x",
+        },
+      ],
+    });
+    const result = await upsertScrapedEvent(client, {
+      ...INPUT,
+      title: "Dedublüman Konseri",
+      start_at: "2026-09-18T18:00:00.000Z",
+      source_url: "https://www.bubilet.com.tr/diyarbakir/etkinlik/dedubluman-konseri",
+    });
+
+    assert.deepEqual(result, { action: "updated" });
+    const update = calls.find((c) => c.op === "update")!;
+    assert.deepEqual(update.filters, { id: "existing-uuid" });
+  });
+
+  test("does NOT match a same-source row on the same day (legitimate second session)", async () => {
+    // One biletinial page listing a real 11:00 matinee and a real 13:00
+    // evening show — same title, same source, different start_at. Must
+    // insert a second row, not collapse them.
+    const { client } = fakeSupabase({
+      existing: null,
+      sameTimeRows: [],
+      sameDayRows: [
+        {
+          id: "matinee-uuid",
+          title: "Alice Harikalar Diyarında",
+          start_at: "2026-09-18T08:00:00.000Z",
+          source_url: "https://biletinial.com/tr-tr/tiyatro/alice",
+        },
+      ],
+    });
+    const result = await upsertScrapedEvent(client, {
+      ...INPUT,
+      title: "Alice Harikalar Diyarında",
+      start_at: "2026-09-18T10:00:00.000Z",
+      source_url: "https://biletinial.com/tr-tr/tiyatro/alice",
+    });
+
+    assert.deepEqual(result, { action: "inserted" });
+  });
+
+  test("queries the Istanbul calendar day, not a raw UTC date", async () => {
+    // 2026-09-18T23:30:00Z is already 2026-09-19 in Istanbul — the day-range
+    // query must be built from the Istanbul date, not the UTC one.
+    const { client, calls } = fakeSupabase({ existing: null, sameTimeRows: [], sameDayRows: [] });
+    await upsertScrapedEvent(client, { ...INPUT, start_at: "2026-09-18T23:30:00.000Z" });
+
+    const range = calls.find((c) => c.op === "select-range")!;
+    assert.deepEqual(range.filters, {
+      start_at: { gte: "2026-09-18T21:00:00.000Z", lte: "2026-09-19T20:59:59.999Z" },
+    });
+  });
+
+  test("a failed day-range lookup is reported as an error, not silently inserted", async () => {
+    const { client, calls } = fakeSupabase({ existing: null, sameTimeRows: [], sameDayError: { message: "boom" } });
     const result = await upsertScrapedEvent(client, INPUT);
 
     assert.equal(result.action, "error");

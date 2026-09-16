@@ -8,8 +8,8 @@
  * existed (the exact situation adding bubilet.ts produced in production on
  * 2026-09-16: e.g. "Büyük Afrika Sirki" and "Büyük Afrika Sirki Oyunu" as
  * two separate live rows). This finds those existing clusters using the
- * same `titlesMatchForDedup` the live fallback uses — so "what counts as a
- * duplicate" can't drift between the two — and, same precedent as
+ * same `sameDayCrossSourceMatch` the live fallback uses — so "what counts as
+ * a duplicate" can't drift between the two — and, same precedent as
  * supabase/migrations/0003_dedup_by_title_start_at.sql's one-time merge,
  * keeps the OLDEST row per cluster and removes the rest.
  * `favorites.event_id references events(id) on delete cascade` (see
@@ -32,7 +32,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { getSupabaseAdmin } from "./lib/supabase-admin";
-import { titlesMatchForDedup } from "./lib/normalize";
+import { istanbulCalendarDate, sameDayCrossSourceMatch } from "./lib/normalize";
 
 export interface DuplicateCandidateEvent {
   id: string;
@@ -42,20 +42,24 @@ export interface DuplicateCandidateEvent {
   source_url: string | null;
 }
 
-/** Groups events sharing a `start_at` into clusters of mutually
- *  dedup-matching titles (transitive closure — see this file's header for
- *  why plain pairwise containment isn't guaranteed transitive on its own). */
+/** Groups events sharing an Istanbul calendar day into clusters of mutually
+ *  dedup-matching events (transitive closure — see this file's header for
+ *  why plain pairwise containment isn't guaranteed transitive on its own).
+ *  Uses `sameDayCrossSourceMatch` — the same day-bucketed, cross-source rule
+ *  `upsert-event.ts`'s live fallback uses — so "what counts as a duplicate"
+ *  can't drift between the one-off cleanup and the ongoing scrape pipeline. */
 export function clusterDuplicates(events: DuplicateCandidateEvent[]): DuplicateCandidateEvent[][] {
-  const byStartAt = new Map<string, DuplicateCandidateEvent[]>();
+  const byDay = new Map<string, DuplicateCandidateEvent[]>();
   for (const event of events) {
-    const bucket = byStartAt.get(event.start_at);
+    const day = istanbulCalendarDate(event.start_at);
+    const bucket = byDay.get(day);
     if (bucket) bucket.push(event);
-    else byStartAt.set(event.start_at, [event]);
+    else byDay.set(day, [event]);
   }
 
   const clusters: DuplicateCandidateEvent[][] = [];
 
-  for (const group of byStartAt.values()) {
+  for (const group of byDay.values()) {
     if (group.length < 2) continue;
 
     const assigned = new Set<string>();
@@ -72,7 +76,7 @@ export function clusterDuplicates(events: DuplicateCandidateEvent[]): DuplicateC
         const next: DuplicateCandidateEvent[] = [];
         for (const candidate of group) {
           if (assigned.has(candidate.id)) continue;
-          if (frontier.some((member) => titlesMatchForDedup(member.title, candidate.title))) {
+          if (frontier.some((member) => sameDayCrossSourceMatch(member, candidate))) {
             cluster.push(candidate);
             assigned.add(candidate.id);
             next.push(candidate);

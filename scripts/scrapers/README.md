@@ -12,8 +12,8 @@ overall project context.
 - `lib/supabase-admin.ts` — service-role Supabase client for Node scripts (bypasses RLS). Throws `MissingSupabaseConfigError` when env vars are absent, so callers can tell "not set up yet" apart from a real failure.
 - `lib/types.ts` — `ScrapedEventInput` (what a parser must produce) and `ScrapeRunResult`.
 - `lib/resolve-refs.ts` — resolves venue/category *names* to ids, creating rows as needed.
-- `lib/normalize.ts` — `normalizeText`, `parseIstanbulLocalTime`, `stripDateTimeOffset`, `formatPriceTL`, `normalizeTitleForDedup`/`titlesMatchForDedup`. Read this before touching any date handling or the dedup fallback.
-- `lib/upsert-event.ts` — dedup + upsert into `events`, forcing `source_type: "scraped"` and `status: "approved"`. Matches exact `(title, start_at)` first, then falls back to a normalized-title comparison among rows at the same `start_at` — read its header before touching dedup behavior.
+- `lib/normalize.ts` — `normalizeText`, `parseIstanbulLocalTime`, `stripDateTimeOffset`, `formatPriceTL`, `normalizeTitleForDedup`/`titlesMatchForDedup`, `istanbulCalendarDate`/`istanbulCalendarDayRangeUtc`/`sameDayCrossSourceMatch`. Read this before touching any date handling or the dedup fallback.
+- `lib/upsert-event.ts` — dedup + upsert into `events`, forcing `source_type: "scraped"` and `status: "approved"`. Matches exact `(title, start_at)` first, falls back to a normalized-title comparison among rows at the same `start_at`, then falls back again to a normalized-title comparison across the whole Istanbul calendar day for rows from a DIFFERENT source (catches two vendors reporting the same event at different clock times, e.g. doors vs. showtime) — read its header before touching dedup behavior.
 - `run-all.ts` — runs every active parser in sequence, prints a summary, exits non-zero on any error. A parser that throws outright doesn't stop the others.
 
 ### Active parsers
@@ -26,7 +26,7 @@ overall project context.
 
 ### Maintenance (one-off, not part of the cron)
 
-- `merge-duplicate-events.ts` — finds and (with `--apply`) deletes existing near-duplicate `events` rows using the same `titlesMatchForDedup` the live fallback uses, keeping the oldest row per cluster. For cleaning up rows inserted before that fallback existed. Dry run by default; see its header.
+- `merge-duplicate-events.ts` — finds and (with `--apply`) deletes existing near-duplicate `events` rows using the same `sameDayCrossSourceMatch` the live fallback uses, keeping the oldest row per cluster. For cleaning up rows inserted before that fallback existed. Dry run by default; see its header.
 
 ## Adding a real parser
 

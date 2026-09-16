@@ -7,9 +7,12 @@ import test, { describe } from "node:test";
 
 import {
   formatPriceTL,
+  istanbulCalendarDate,
+  istanbulCalendarDayRangeUtc,
   normalizeText,
   normalizeTitleForDedup,
   parseIstanbulLocalTime,
+  sameDayCrossSourceMatch,
   stripDateTimeOffset,
 } from "./normalize";
 
@@ -153,6 +156,79 @@ describe("normalizeTitleForDedup", () => {
   test("noise words only strip as whole words, not substrings", () => {
     // "Oyuncular" contains "oyun" but is not the word "oyunu" — must survive.
     assert.equal(normalizeTitleForDedup("Oyuncular Buluşması"), "oyuncularbuluşması");
+  });
+});
+
+describe("istanbulCalendarDate", () => {
+  test("converts a UTC instant to its Istanbul calendar day", () => {
+    assert.equal(istanbulCalendarDate("2026-09-18T17:00:00.000Z"), "2026-09-18");
+  });
+
+  test("rolls over correctly for the first hours of the Istanbul day", () => {
+    // 00:30 Istanbul = 21:30 UTC the previous day — a naive UTC-date read
+    // would misreport this as still the 17th.
+    assert.equal(istanbulCalendarDate("2026-09-17T21:30:00.000Z"), "2026-09-18");
+  });
+});
+
+describe("istanbulCalendarDayRangeUtc", () => {
+  test("returns the UTC instants bounding an Istanbul calendar day", () => {
+    const { start, end } = istanbulCalendarDayRangeUtc("2026-09-18");
+    assert.equal(start, "2026-09-17T21:00:00.000Z");
+    assert.equal(end, "2026-09-18T20:59:59.999Z");
+  });
+
+  test("round-trips with istanbulCalendarDate for an instant near midnight", () => {
+    const day = istanbulCalendarDate("2026-09-18T17:00:00.000Z");
+    const { start, end } = istanbulCalendarDayRangeUtc(day);
+    assert.ok("2026-09-18T17:00:00.000Z" >= start && "2026-09-18T17:00:00.000Z" <= end);
+  });
+});
+
+describe("sameDayCrossSourceMatch", () => {
+  // Confirmed live on 2026-09-16: biletix's "Dedublüman" and bubilet's
+  // "Dedublüman Konseri" 60 minutes apart, same night, same venue.
+  test("matches a fuzzy title from a different source at a nearby time", () => {
+    const a = { title: "Dedublüman", start_at: "2026-09-18T17:00:00.000Z", source_url: "https://biletix.com/x" };
+    const b = {
+      title: "Dedublüman Konseri",
+      start_at: "2026-09-18T18:00:00.000Z",
+      source_url: "https://bubilet.com.tr/y",
+    };
+    assert.equal(sameDayCrossSourceMatch(a, b), true);
+  });
+
+  test("does NOT match the same source's two legitimate same-day sessions", () => {
+    // "Alice Harikalar Diyarında" — one biletinial page listing a real 11:00
+    // matinee and a real 13:00 evening show. Same title, same source,
+    // different start_at: this must stay two rows.
+    const a = {
+      title: "Alice Harikalar Diyarında",
+      start_at: "2026-09-26T11:00:00.000Z",
+      source_url: "https://biletinial.com/tr-tr/tiyatro/alice",
+    };
+    const b = {
+      title: "Alice Harikalar Diyarında",
+      start_at: "2026-09-26T13:00:00.000Z",
+      source_url: "https://biletinial.com/tr-tr/tiyatro/alice",
+    };
+    assert.equal(sameDayCrossSourceMatch(a, b), false);
+  });
+
+  test("matches an exact start_at regardless of source", () => {
+    const a = { title: "Jül Sezar", start_at: "2026-09-18T17:00:00.000Z", source_url: "https://a.example" };
+    const b = { title: "Jül Sezar", start_at: "2026-09-18T17:00:00.000Z", source_url: "https://a.example" };
+    assert.equal(sameDayCrossSourceMatch(a, b), true);
+  });
+
+  test("does not match unrelated titles even across sources", () => {
+    const a = { title: "Emre Aydın Konseri", start_at: "2026-09-18T17:00:00.000Z", source_url: "https://a.example" };
+    const b = {
+      title: "Gökhan Türkmen Konseri",
+      start_at: "2026-09-18T18:00:00.000Z",
+      source_url: "https://b.example",
+    };
+    assert.equal(sameDayCrossSourceMatch(a, b), false);
   });
 });
 

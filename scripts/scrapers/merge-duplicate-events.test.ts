@@ -26,13 +26,58 @@ describe("clusterDuplicates", () => {
     );
   });
 
-  test("does not cluster the same title at different start_at values", () => {
+  test("does not cluster the same title at different start_at values on different days", () => {
     const a = event({ id: "a", title: "Büyük Afrika Sirki", start_at: "2026-09-18T17:00:00.000Z" });
     const b = event({ id: "b", title: "Büyük Afrika Sirki", start_at: "2026-09-19T17:00:00.000Z" });
 
     // Different start_at means different showtimes — not a dedup cluster,
     // exact-title match here is fine, no fallback needed.
     assert.equal(clusterDuplicates([a, b]).length, 0);
+  });
+
+  test("does not cluster the SAME source's two legitimate same-day sessions", () => {
+    // "Alice Harikalar Diyarında" — one biletinial page listing a real 11:00
+    // matinee and a real 13:00 evening show, confirmed live on 2026-09-16.
+    // Same title, same source, same day, different start_at: must NOT merge.
+    const a = event({
+      id: "a",
+      title: "Alice Harikalar Diyarında",
+      start_at: "2026-09-26T11:00:00.000Z",
+      source_url: "https://biletinial.com/tr-tr/tiyatro/alice",
+    });
+    const b = event({
+      id: "b",
+      title: "Alice Harikalar Diyarında",
+      start_at: "2026-09-26T13:00:00.000Z",
+      source_url: "https://biletinial.com/tr-tr/tiyatro/alice",
+    });
+
+    assert.equal(clusterDuplicates([a, b]).length, 0);
+  });
+
+  test("clusters a cross-source pair at DIFFERENT times on the same day", () => {
+    // The actual bug reported live on 2026-09-16 after the first dedup fix:
+    // biletix's "Dedublüman" and bubilet's "Dedublüman Konseri" 60 minutes
+    // apart, same night — the same-start_at-only bucketing missed this.
+    const a = event({
+      id: "a",
+      title: "Dedublüman",
+      start_at: "2026-09-18T17:00:00.000Z",
+      source_url: "https://www.biletix.com/etkinlik/x",
+    });
+    const b = event({
+      id: "b",
+      title: "Dedublüman Konseri",
+      start_at: "2026-09-18T18:00:00.000Z",
+      source_url: "https://www.bubilet.com.tr/y",
+    });
+
+    const clusters = clusterDuplicates([a, b]);
+    assert.equal(clusters.length, 1);
+    assert.deepEqual(
+      clusters[0].map((e) => e.id).sort(),
+      ["a", "b"],
+    );
   });
 
   test("does not cluster unrelated events sharing a start_at", () => {

@@ -106,3 +106,56 @@ export function titlesMatchForDedup(a: string, b: string): boolean {
   if (!na || !nb) return false;
   return na === nb || na.includes(nb) || nb.includes(na);
 }
+
+/**
+ * The Istanbul calendar day a stored UTC instant falls on, as "YYYY-MM-DD".
+ * Used by the cross-source-time-drift fallback below — two sources reporting
+ * "the same event" at different clock times (doors vs. showtime, a vendor's
+ * own rounding) still agree on the date, even when they disagree on the
+ * minute. Turkey's fixed UTC+3 (no DST since 2016) means this never needs a
+ * timezone-database lookup, but it must still go through `Intl` explicitly —
+ * a bare `date.getUTCDate()` would be wrong for the first three hours of
+ * each Istanbul day.
+ */
+export function istanbulCalendarDate(iso: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
+}
+
+/**
+ * The UTC instants bounding an Istanbul calendar day ("YYYY-MM-DD" as
+ * returned by `istanbulCalendarDate`), inclusive. Turkey's fixed +03:00
+ * offset makes this a plain string concatenation — no DST edge cases.
+ */
+export function istanbulCalendarDayRangeUtc(day: string): { start: string; end: string } {
+  return {
+    start: new Date(`${day}T00:00:00+03:00`).toISOString(),
+    end: new Date(`${day}T23:59:59.999+03:00`).toISOString(),
+  };
+}
+
+/**
+ * Whether two events are the same real event for dedup purposes, given they
+ * fall on the same Istanbul calendar day: either an exact `start_at` match
+ * (any source — this is the pre-existing "worded differently" case), or a
+ * fuzzy title match from a DIFFERENT source. The source check matters: a
+ * single source's own page legitimately lists multiple real sessions on one
+ * day (a matinee and an evening show) under the same `source_url` — those
+ * must stay separate rows, and only differing sources reporting drifted
+ * clock times for what both call the same title should collapse together.
+ * Confirmed against production on 2026-09-16: "Dedublüman" (biletix, doors
+ * time) / "Dedublüman Konseri" (bubilet, showtime) 60 minutes apart, "Büyük
+ * Afrika Sirki" (biletinial vs. biletix) 120 minutes apart, etc. — all
+ * cross-source, none same-source.
+ */
+export function sameDayCrossSourceMatch(
+  a: { title: string; start_at: string; source_url: string | null },
+  b: { title: string; start_at: string; source_url: string | null },
+): boolean {
+  if (!titlesMatchForDedup(a.title, b.title)) return false;
+  return a.start_at === b.start_at || a.source_url !== b.source_url;
+}
