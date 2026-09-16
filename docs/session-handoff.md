@@ -173,7 +173,12 @@ kaldı). **Bir kaynaktan gelen iki zaman damgasını karşılaştırırken önce
   önizlenir/düzeltilir, kaydedilince `status: "pending"` olarak eklenir —
   yayına girmeden önce mevcut `/admin` onay kuyruğundan geçer. Yeni env
   değişkeni: `ANTHROPIC_API_KEY` (`.env.local` + Vercel; scrape cron'una
-  eklenmedi, bu akış sadece admin panelinde çalışıyor). Detay:
+  eklenmedi, bu akış sadece admin panelinde çalışıyor). **Prod'a almadan
+  önce** `supabase/migrations/0004_event_images_bucket.sql` (`event-images`
+  Storage bucket'ı + iki RLS politikası) production Supabase projesine de
+  uygulanmalı (`npx supabase db push` veya Supabase dashboard'ının SQL
+  editörü ile, diğer migration'larda olduğu gibi) — yoksa görsel yükleme
+  adımı başarısız olur. Detay:
   `docs/design/instagram-assisted-entry.md`.
 - **PWA ikonları hâlâ placeholder** (turuncu kare + "E").
 - **Web push bildirimleri yok** (plan.md Faz 1'de var, ertelendi).

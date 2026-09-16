@@ -2,12 +2,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getAnthropicClient } from "@/lib/anthropic";
 import { extractEventFromImage, type ExtractedEventFields } from "@/lib/instagram-extract";
 import type { EventRow } from "@/lib/supabase/types";
-import { parseEventForm, readField, resolveCityId } from "./actions";
+import { parseEventForm, readField, resolveCityId } from "./event-form";
 import { resolveVenueByName } from "./venue-resolve";
 
 const EVENT_IMAGES_BUCKET = "event-images";
@@ -17,6 +16,11 @@ export type ExtractState =
   | { status: "idle" }
   | { status: "error"; message: string }
   | { status: "extracted"; fields: ExtractedEventFields; imageUrl: string; sourceUrl: string | null };
+
+export type CreateEventState =
+  | { status: "idle" }
+  | { status: "error"; message: string }
+  | { status: "success"; eventId: string };
 
 async function uploadEventImage(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -101,50 +105,62 @@ export async function extractFromInstagram(
  * EventFormFields component new/edit use — this actually inserts the row,
  * always as status "pending" (never auto-approved, unlike createEvent) so
  * it lands in the existing /admin "Onay bekleyen" queue for a final check.
+ * Shaped for React 19's `useActionState`, same as extractFromInstagram
+ * above — a validation/DB failure (missing venue, duplicate title+start_at)
+ * returns an error state instead of throwing, so the admin doesn't lose the
+ * already-uploaded image and the paid AI extraction behind Next's generic
+ * production error page (there is no error.tsx in this repo).
  */
-export async function createEventFromInstagram(formData: FormData) {
-  const supabase = await createClient();
-  const fields = parseEventForm(formData);
-  const venueName = readField(formData, "venue_name");
-  const sourceUrl = readField(formData, "source_url") || null;
+export async function createEventFromInstagram(
+  _prevState: CreateEventState,
+  formData: FormData,
+): Promise<CreateEventState> {
+  try {
+    const supabase = await createClient();
+    const fields = parseEventForm(formData);
+    const venueName = readField(formData, "venue_name");
+    const sourceUrl = readField(formData, "source_url") || null;
 
-  if (!fields.title || !fields.start_at) {
-    throw new Error("Başlık ve başlangıç tarihi zorunludur.");
+    if (!fields.title || !fields.start_at) {
+      throw new Error("Başlık ve başlangıç tarihi zorunludur.");
+    }
+
+    let venueId = fields.venue_id;
+    if (!venueId && venueName) {
+      venueId = await resolveVenueByName(supabase, venueName);
+    }
+
+    const city_id = await resolveCityId(supabase, venueId);
+
+    const insertRow: Partial<EventRow> = {
+      title: fields.title,
+      description: fields.description,
+      start_at: fields.start_at,
+      end_at: fields.end_at,
+      city_id,
+      venue_id: venueId,
+      category_id: fields.category_id,
+      price: fields.price,
+      image_url: fields.image_url,
+      source_type: "manual",
+      source_url: sourceUrl,
+      status: "pending",
+    };
+
+    const { data, error } = await supabase
+      .from("events")
+      .insert(insertRow as never)
+      .select("id")
+      .returns<Pick<EventRow, "id">[]>();
+
+    const inserted = data?.[0];
+    if (error || !inserted) {
+      throw new Error(`Etkinlik oluşturulamadı: ${error?.message ?? "bilinmeyen hata"}`);
+    }
+
+    revalidatePath("/admin");
+    return { status: "success", eventId: inserted.id };
+  } catch (err) {
+    return { status: "error", message: err instanceof Error ? err.message : String(err) };
   }
-
-  let venueId = fields.venue_id;
-  if (!venueId && venueName) {
-    venueId = await resolveVenueByName(supabase, venueName);
-  }
-
-  const city_id = await resolveCityId(supabase, venueId);
-
-  const insertRow: Partial<EventRow> = {
-    title: fields.title,
-    description: fields.description,
-    start_at: fields.start_at,
-    end_at: fields.end_at,
-    city_id,
-    venue_id: venueId,
-    category_id: fields.category_id,
-    price: fields.price,
-    image_url: fields.image_url,
-    source_type: "manual",
-    source_url: sourceUrl,
-    status: "pending",
-  };
-
-  const { data, error } = await supabase
-    .from("events")
-    .insert(insertRow as never)
-    .select("id")
-    .returns<Pick<EventRow, "id">[]>();
-
-  const inserted = data?.[0];
-  if (error || !inserted) {
-    throw new Error(`Etkinlik oluşturulamadı: ${error?.message ?? "bilinmeyen hata"}`);
-  }
-
-  revalidatePath("/admin");
-  redirect(`/admin/events/${inserted.id}/edit`);
 }

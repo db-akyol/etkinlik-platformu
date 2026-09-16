@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { istanbulLocalToUtcIso } from "@/lib/istanbul-time";
-import type { EventRow, Venue } from "@/lib/supabase/types";
+import type { EventRow } from "@/lib/supabase/types";
+import { parseEventForm, resolveCityId } from "./event-form";
 
 // NOTE: lib/supabase/types.ts's `Database` type is missing the `Relationships`
 // field on each table (and `Views`/`Functions` on the schema) that
@@ -46,61 +46,6 @@ export async function rejectEvent(id: string) {
   }
 
   revalidatePath("/admin");
-}
-
-export type ParsedEventFields = {
-  title: string;
-  description: string | null;
-  start_at: string;
-  end_at: string | null;
-  venue_id: string | null;
-  category_id: string | null;
-  price: string | null;
-  image_url: string | null;
-};
-
-export function readField(formData: FormData, key: string): string {
-  const value = formData.get(key);
-  return typeof value === "string" ? value.trim() : "";
-}
-
-export function parseEventForm(formData: FormData): ParsedEventFields {
-  const startAtRaw = readField(formData, "start_at");
-  const endAtRaw = readField(formData, "end_at");
-
-  return {
-    title: readField(formData, "title"),
-    description: readField(formData, "description") || null,
-    start_at: startAtRaw ? istanbulLocalToUtcIso(startAtRaw) : "",
-    end_at: endAtRaw ? istanbulLocalToUtcIso(endAtRaw) : null,
-    venue_id: readField(formData, "venue_id") || null,
-    category_id: readField(formData, "category_id") || null,
-    price: readField(formData, "price") || null,
-    image_url: readField(formData, "image_url") || null,
-  };
-}
-
-export async function resolveCityId(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  venueId: string | null,
-): Promise<string> {
-  if (!venueId) {
-    throw new Error("Etkinlik için bir mekan seçilmelidir.");
-  }
-
-  const { data: venues, error } = await supabase
-    .from("venues")
-    .select("city_id")
-    .eq("id", venueId)
-    .returns<Pick<Venue, "city_id">[]>();
-
-  const venue = venues?.[0];
-
-  if (error || !venue) {
-    throw new Error("Seçilen mekan bulunamadı.");
-  }
-
-  return venue.city_id;
 }
 
 export async function createEvent(formData: FormData) {

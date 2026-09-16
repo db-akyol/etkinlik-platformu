@@ -1,12 +1,19 @@
 // components/admin/InstagramImportForm.tsx
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import type { Category, Venue } from "@/lib/supabase/types";
-import { createEventFromInstagram, extractFromInstagram, type ExtractState } from "@/app/admin/instagram-actions";
+import {
+  createEventFromInstagram,
+  extractFromInstagram,
+  type CreateEventState,
+  type ExtractState,
+} from "@/app/admin/instagram-actions";
 import { EventFormFields } from "./EventFormFields";
 
 const INITIAL_STATE: ExtractState = { status: "idle" };
+const INITIAL_CREATE_STATE: CreateEventState = { status: "idle" };
 
 const FIELD_CLASS =
   "rounded-md border border-black/20 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/40";
@@ -19,6 +26,17 @@ export function InstagramImportForm({
   categories: Category[];
 }) {
   const [state, formAction, isPending] = useActionState(extractFromInstagram, INITIAL_STATE);
+  const [createState, createFormAction, isCreatePending] = useActionState(
+    createEventFromInstagram,
+    INITIAL_CREATE_STATE,
+  );
+  const router = useRouter();
+
+  useEffect(() => {
+    if (createState.status === "success") {
+      router.push(`/admin/events/${createState.eventId}/edit`);
+    }
+  }, [createState, router]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -66,7 +84,7 @@ export function InstagramImportForm({
 
       {state.status === "extracted" && (
         <form
-          action={createEventFromInstagram}
+          action={createFormAction}
           className="flex max-w-xl flex-col gap-4 border-t border-black/10 pt-6 dark:border-white/10"
         >
           <p className="text-sm opacity-70">
@@ -103,11 +121,16 @@ export function InstagramImportForm({
             }}
           />
 
+          {createState.status === "error" && (
+            <p className="text-sm text-red-600 dark:text-red-400">{createState.message}</p>
+          )}
+
           <button
             type="submit"
-            className="mt-2 w-fit rounded-md bg-black px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-black"
+            disabled={isCreatePending}
+            className="mt-2 w-fit rounded-md bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
           >
-            Onayla ve Kaydet
+            {isCreatePending ? "Kaydediliyor..." : "Onayla ve Kaydet"}
           </button>
         </form>
       )}
