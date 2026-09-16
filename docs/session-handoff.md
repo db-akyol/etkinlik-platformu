@@ -5,7 +5,8 @@ ettirebilsin diye. Projenin orijinal planı için
 [`docs/plan.md`](./plan.md); scraper'ların ayrıntısı için
 [`scripts/scrapers/README.md`](../scripts/scrapers/README.md).
 
-**Son güncelleme:** 2026-09-15 — test altyapısı + CI eklenen oturum sonu.
+**Son güncelleme:** 2026-09-16 — public site'a "Dicle" renk/tipografi
+kimliği ve tarih rozetleri eklendi.
 
 ---
 
@@ -29,6 +30,13 @@ manuel giriş sadece ulaşılamayan etkinlikler için yedektir.
 - **PWA katmanı** — manifest, service worker, offline sayfası.
 - **Test + CI** — `npm test` (125 test, ağ/DB gerektirmez) ve her push'ta
   typecheck + lint + test çalıştıran `.github/workflows/ci.yml`.
+
+**Görsel kimlik not:** public site'ta indigo aksan rengi "Dicle" tonuna
+(`--color-dicle`, `app/globals.css`) geçti, başlıklar Space Grotesk
+fontuyla yazılıyor (`--font-display`). Kart grid'i, thumbnail'lar ve genel
+yerleşim **bilerek dokunulmadan** bırakıldı. Kural net: tasarım değişiklikleri her zaman mevcut yapının üzerine ekleme
+olmalı, yeniden tasarım değil (daha önce tam kapsamlı bir
+"Kara Amid" yeniden tasarımı denenip geri alınmıştı).
 
 ## Mimari notlar
 

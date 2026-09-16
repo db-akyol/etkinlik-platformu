@@ -63,19 +63,17 @@ export default function EventCard({
         )}
         <span
           className={`absolute bottom-3 left-3 rounded-full px-2.5 py-1 text-xs font-medium ${
-            badge.soon ? "bg-indigo-600 text-white" : "bg-black/70 text-white"
+            badge.soon ? "bg-dicle text-white" : "bg-black/70 text-white"
           }`}
         >
           {badge.text}
         </span>
       </div>
       <div className="flex flex-1 flex-col gap-2 p-4">
-        <h3 className="line-clamp-2 text-base font-semibold text-zinc-900 dark:text-zinc-50">
+        <h3 className="font-display line-clamp-2 text-base font-semibold text-zinc-900 dark:text-zinc-50">
           {event.title}
         </h3>
-        <p className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
-          {formatEventDateTime(event.start_at)}
-        </p>
+        <p className="text-sm font-medium text-dicle">{formatEventDateTime(event.start_at)}</p>
         {event.venue?.name && (
           <p className="line-clamp-1 text-sm text-zinc-600 dark:text-zinc-400">
             {event.venue.name}

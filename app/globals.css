@@ -1,14 +1,25 @@
 @import "tailwindcss";
 
+/*
+ * "Dicle" accent — named after the Tigris river that runs past Diyarbakır.
+ * Replaces the generic indigo accent everywhere; the rest of the palette
+ * (zinc grays, white/near-black surfaces) is untouched on purpose.
+ */
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  --color-dicle: #0f6e78;
+  --color-dicle-dim: #0c5960;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-dicle: var(--color-dicle);
+  --color-dicle-dim: var(--color-dicle-dim);
   --font-sans: var(--font-geist-sans);
+  --font-display: var(--font-space-grotesk);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -16,6 +27,8 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+    --color-dicle: #2dd4bf;
+    --color-dicle-dim: #14b8a6;
   }
 }
 

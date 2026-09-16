@@ -74,7 +74,7 @@ export default function FilterBar({ categories }: { categories: Category[] }) {
               onClick={() => updateParam("tarih", filter.value)}
               className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
                 activeDate === filter.value
-                  ? "bg-indigo-600 text-white"
+                  ? "bg-dicle text-white"
                   : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
               }`}
             >
@@ -96,7 +96,7 @@ export default function FilterBar({ categories }: { categories: Category[] }) {
                 onClick={() => updateParam("gorunum", view.value === "liste" ? "" : view.value)}
                 className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
                   activeView === view.value
-                    ? "bg-indigo-600 text-white"
+                    ? "bg-dicle text-white"
                     : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
                 }`}
               >

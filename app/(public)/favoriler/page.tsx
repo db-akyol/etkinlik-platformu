@@ -33,7 +33,7 @@ export default async function FavorilerPage() {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 sm:text-3xl">
+        <h1 className="font-display text-2xl font-bold text-zinc-900 dark:text-zinc-50 sm:text-3xl">
           Favorilerim
         </h1>
         <p className="text-sm text-zinc-600 dark:text-zinc-400">

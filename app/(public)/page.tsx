@@ -107,7 +107,7 @@ export default async function Home({
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-1">
-        <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-4xl">
+        <h1 className="font-display text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-4xl">
           Diyarbakır Etkinlikleri
         </h1>
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -117,7 +117,7 @@ export default async function Home({
         </p>
       </header>
 
-      <div className="sticky top-0 z-20 -mx-4 border-b border-black/5 bg-background px-4 py-3 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 dark:border-white/10">
+      <div className="sticky top-14 z-20 -mx-4 border-b border-black/5 bg-background px-4 py-3 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 dark:border-white/10">
         <Suspense fallback={<div className="h-10" />}>
           <FilterBar categories={categories ?? []} />
         </Suspense>

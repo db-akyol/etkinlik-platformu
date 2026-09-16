@@ -23,7 +23,7 @@ const DIYARBAKIR_CENTER: [number, number] = [37.9144, 40.2306];
 const pinIcon = L.divIcon({
   className: "",
   html: `<svg width="28" height="38" viewBox="0 0 28 38" xmlns="http://www.w3.org/2000/svg">
-    <path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 24 14 24s14-13.5 14-24C28 6.3 21.7 0 14 0z" fill="#ea580c"/>
+    <path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 24 14 24s14-13.5 14-24C28 6.3 21.7 0 14 0z" fill="#0f6e78"/>
     <circle cx="14" cy="14" r="5.5" fill="white"/>
   </svg>`,
   iconSize: [28, 38],
@@ -72,7 +72,7 @@ export default function EventMapInner({
           <Popup>
             <div className="flex flex-col gap-0.5">
               {marker.href ? (
-                <Link href={marker.href} className="font-medium text-indigo-600 hover:underline">
+                <Link href={marker.href} className="font-medium text-dicle hover:underline">
                   {marker.title}
                 </Link>
               ) : (

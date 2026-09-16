@@ -91,10 +91,7 @@ export default async function EventDetailPage({
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-      <Link
-        href="/"
-        className="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400"
-      >
+      <Link href="/" className="text-sm font-medium text-dicle hover:underline">
         ← Tüm etkinlikler
       </Link>
 
@@ -108,7 +105,7 @@ export default async function EventDetailPage({
               className="h-full w-full object-cover"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600">
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-dicle to-dicle-dim">
               <span className="text-lg font-medium text-white/90">
                 {event.category?.name ?? "Etkinlik"}
               </span>
@@ -119,7 +116,7 @@ export default async function EventDetailPage({
         <div className="flex flex-col gap-4 p-6">
           <div className="flex flex-wrap items-center gap-2">
             {event.category && (
-              <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+              <span className="rounded-full bg-dicle/10 px-3 py-1 text-xs font-medium text-dicle">
                 {event.category.name}
               </span>
             )}
@@ -134,11 +131,11 @@ export default async function EventDetailPage({
             />
           </div>
 
-          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 sm:text-3xl">
+          <h1 className="font-display text-2xl font-bold text-zinc-900 dark:text-zinc-50 sm:text-3xl">
             {event.title}
           </h1>
 
-          <p className="text-base font-medium text-indigo-600 dark:text-indigo-400">
+          <p className="text-base font-medium text-dicle">
             {formatEventDateTime(event.start_at)}
             {event.end_at ? ` – ${formatEventDateTime(event.end_at)}` : null}
           </p>
@@ -179,7 +176,7 @@ export default async function EventDetailPage({
                 href={event.source_url}
                 target="_blank"
                 rel="noopener noreferrer nofollow"
-                className="underline hover:text-indigo-600 dark:hover:text-indigo-400"
+                className="underline hover:text-dicle"
               >
                 {event.source_url}
               </a>

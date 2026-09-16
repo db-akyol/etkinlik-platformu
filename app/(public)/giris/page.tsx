@@ -40,7 +40,7 @@ function GirisForm() {
   return (
     <div className="flex flex-1 items-center justify-center px-4 py-16">
       <div className="w-full max-w-sm rounded-lg border border-black/10 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-black/20">
-        <h1 className="mb-6 text-center text-xl font-semibold">Giriş Yap</h1>
+        <h1 className="font-display mb-6 text-center text-xl font-semibold">Giriş Yap</h1>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
             <label htmlFor="email" className="text-sm font-medium">
@@ -76,14 +76,14 @@ function GirisForm() {
           <button
             type="submit"
             disabled={loading}
-            className="mt-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 hover:bg-indigo-700"
+            className="mt-2 rounded-md bg-dicle px-4 py-2 text-sm font-medium text-white disabled:opacity-50 hover:bg-dicle-dim"
           >
             {loading ? "Giriş yapılıyor..." : "Giriş Yap"}
           </button>
         </form>
         <p className="mt-4 text-center text-sm text-zinc-600 dark:text-zinc-400">
           Hesabın yok mu?{" "}
-          <Link href="/kayit" className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+          <Link href="/kayit" className="font-medium text-dicle hover:underline">
             Kayıt ol
           </Link>
         </p>
