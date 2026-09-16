@@ -12,8 +12,8 @@ overall project context.
 - `lib/supabase-admin.ts` — service-role Supabase client for Node scripts (bypasses RLS). Throws `MissingSupabaseConfigError` when env vars are absent, so callers can tell "not set up yet" apart from a real failure.
 - `lib/types.ts` — `ScrapedEventInput` (what a parser must produce) and `ScrapeRunResult`.
 - `lib/resolve-refs.ts` — resolves venue/category *names* to ids, creating rows as needed.
-- `lib/normalize.ts` — `normalizeText`, `parseIstanbulLocalTime`, `stripDateTimeOffset`, `formatPriceTL`. Read this before touching any date handling.
-- `lib/upsert-event.ts` — dedup + upsert into `events`, forcing `source_type: "scraped"` and `status: "approved"`.
+- `lib/normalize.ts` — `normalizeText`, `parseIstanbulLocalTime`, `stripDateTimeOffset`, `formatPriceTL`, `normalizeTitleForDedup`/`titlesMatchForDedup`. Read this before touching any date handling or the dedup fallback.
+- `lib/upsert-event.ts` — dedup + upsert into `events`, forcing `source_type: "scraped"` and `status: "approved"`. Matches exact `(title, start_at)` first, then falls back to a normalized-title comparison among rows at the same `start_at` — read its header before touching dedup behavior.
 - `run-all.ts` — runs every active parser in sequence, prints a summary, exits non-zero on any error. A parser that throws outright doesn't stop the others.
 
 ### Active parsers
@@ -21,8 +21,12 @@ overall project context.
 - `biletinial.ts` — biletinial.com's Diyarbakır listing, via the same JSON endpoint the city page calls client-side, plus a per-event detail-page fetch for price/description/end time.
 - `biletix.ts` — biletix.com's Diyarbakır search, via Playwright (the Solr endpoint needs the page's own Queue-it session) plus two public `bxcached` JSON APIs for price and event rules.
 - `diyarbakir-belediye.ts` — the municipality's own events page, read out of the Next.js RSC payload embedded in the (robots-allowed) page HTML.
-- `bubilet.ts` — bubilet.com.tr's Diyarbakır listings. **The one exception to this project's "don't build around a source's bot protection" rule** (see below) — the actual HTTP fetching happens in a separate Python subprocess, `bubilet_fetch.py`, using `cloudscraper` to get past bubilet's Cloudflare bot-challenge. This was an explicit, informed decision by the project owner, made after that rule was raised again for this specific case — see `docs/session-handoff.md`. `bubilet.ts` itself only maps the raw JSON that subprocess produces into the normal pipeline; read its header before touching it.
+- `bubilet.ts` — bubilet.com.tr's Diyarbakır listings. **The one exception to this project's "don't build around a source's bot protection" rule** (see below) — the actual HTTP fetching happens in a separate Python subprocess, `bubilet_fetch.py`, using `cloudscraper` to get past bubilet's Cloudflare bot-challenge. This was an explicit, informed decision by the project owner, made after that rule was raised again for this specific case — see `docs/session-handoff.md`. `bubilet.ts` itself only maps the raw JSON that subprocess produces into the normal pipeline; read its header before touching it. `bubilet_fetch.py` also filters out events whose venue isn't actually in Diyarbakır — bubilet's own `city/{id}` URL filter isn't reliable for nationally-touring events.
 - `example-hn.ts` — **structural example only**, not a real source. Proves the fetch → parse → normalize → resolve → upsert pipeline against a stable, real, static page (Hacker News' front page). Every row it would write is prefixed `[DEMO]`.
+
+### Maintenance (one-off, not part of the cron)
+
+- `merge-duplicate-events.ts` — finds and (with `--apply`) deletes existing near-duplicate `events` rows using the same `titlesMatchForDedup` the live fallback uses, keeping the oldest row per cluster. For cleaning up rows inserted before that fallback existed. Dry run by default; see its header.
 
 ## Adding a real parser
 

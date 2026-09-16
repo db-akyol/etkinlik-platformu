@@ -52,8 +52,25 @@
  * select-then-insert-or-update below trades a small amount of non-atomicity
  * (acceptable for an MVP cron running twice a day, not at higher
  * concurrency) for the ability to leave `status` alone on update.
+ *
+ * --- Fallback lookup: same start_at, normalized title ----------------------
+ *
+ * The exact-match lookup above still misses the "worded differently" case
+ * this file used to only warn about hypothetically — adding bubilet.ts made
+ * it a real, visible bug: "Büyük Afrika Sirki" (biletix) and "Büyük Afrika
+ * Sirki Oyunu" (bubilet) at the identical start_at listed as two cards on
+ * the live site (confirmed 2026-09-16). When the exact match finds nothing,
+ * a second query fetches every row at that same `start_at` (small — one
+ * timestamp, not a table scan) and compares `normalizeTitleForDedup(title)`
+ * for equality or containment (handles a source appending extra context,
+ * e.g. "Mustafa Keser Sizlerle" vs "...Sizlerle - Diyarbakır"). This is
+ * still not real fuzzy matching — two unrelated events that happen to share
+ * both a normalized-equal title AND the exact same start_at would collide,
+ * but that's the same accepted risk the plain (title, start_at) key already
+ * carries, just extended slightly.
  */
 import type { EventRow } from "../../../lib/supabase/types";
+import { titlesMatchForDedup } from "./normalize";
 import type { SupabaseAdminClient } from "./supabase-admin";
 
 export type UpsertScrapedEventInput = Omit<EventRow, "id" | "created_at" | "status">;
@@ -61,6 +78,38 @@ export type UpsertScrapedEventInput = Omit<EventRow, "id" | "created_at" | "stat
 export type UpsertScrapedEventResult =
   | { action: "inserted" | "updated" }
   | { action: "error"; error: unknown };
+
+/**
+ * Finds an existing row matching `title`/`start_at`, exact first, then
+ * falling back to a normalized-title comparison among rows at the same
+ * `start_at` — see the file header's "Fallback lookup" section.
+ */
+async function findExistingEvent(
+  supabase: SupabaseAdminClient,
+  title: string,
+  startAt: string,
+): Promise<{ id: string } | null | { error: unknown }> {
+  const { data: exact, error: exactError } = await supabase
+    .from("events")
+    .select("id")
+    .eq("title", title)
+    .eq("start_at", startAt)
+    .maybeSingle();
+
+  if (exactError) return { error: exactError };
+  if (exact) return exact;
+
+  const { data: sameTime, error: sameTimeError } = await supabase
+    .from("events")
+    .select("id, title")
+    .eq("start_at", startAt);
+
+  if (sameTimeError) return { error: sameTimeError };
+
+  const fuzzyMatch = (sameTime ?? []).find((row) => titlesMatchForDedup(title, row.title as string));
+
+  return fuzzyMatch ? { id: fuzzyMatch.id as string } : null;
+}
 
 export async function upsertScrapedEvent(
   supabase: SupabaseAdminClient,
@@ -75,15 +124,10 @@ export async function upsertScrapedEvent(
   // Manual select-then-insert-or-update on the same (title, start_at) key
   // events_dedup_idx dedupes on — see the file header for why this doesn't
   // use a DB-level `.upsert()` despite a matching plain index now existing.
-  const { data: existing, error: selectError } = await supabase
-    .from("events")
-    .select("id")
-    .eq("title", payload.title)
-    .eq("start_at", payload.start_at)
-    .maybeSingle();
+  const existing = await findExistingEvent(supabase, payload.title, payload.start_at);
 
-  if (selectError) {
-    return { action: "error", error: selectError };
+  if (existing && "error" in existing) {
+    return { action: "error", error: existing.error };
   }
 
   if (existing) {
@@ -93,7 +137,14 @@ export async function upsertScrapedEvent(
     // cron run must refresh its content (price/description/image can
     // legitimately change) WITHOUT silently resurrecting it as "approved"
     // and undoing that decision.
-    const { status: _status, ...updateFields } = payload;
+    //
+    // Also NOT `title`: a fuzzy match (see findExistingEvent) can find a row
+    // whose title is a *different* string from this run's — overwriting it
+    // would make the displayed title flip-flop between sources depending on
+    // scrape order. Whichever source's wording was inserted first wins
+    // permanently. (For an exact match this is a no-op: the strings are
+    // already identical.)
+    const { status: _status, title: _title, ...updateFields } = payload;
     const { error: updateError } = await supabase
       .from("events")
       .update(updateFields)

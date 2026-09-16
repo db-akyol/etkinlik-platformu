@@ -22,34 +22,52 @@ import type { SupabaseAdminClient } from "./supabase-admin";
 
 interface RecordedCall {
   table: string;
-  op: "select" | "insert" | "update";
+  op: "select-single" | "select-many" | "insert" | "update";
   filters: Record<string, unknown>;
+  columns?: string;
   payload?: Record<string, unknown>;
 }
 
-/** Minimal stand-in for the slice of PostgREST's chainable builder that
- *  upsert-event.ts actually uses. */
+/**
+ * Minimal stand-in for the slice of PostgREST's chainable builder that
+ * upsert-event.ts actually uses. Two different `select()` shapes are exercised:
+ *
+ *   - `.select("id").eq(...).eq(...).maybeSingle()` — the exact-match lookup.
+ *   - `.select("id, title").eq("start_at", ...)` awaited directly (no
+ *     `.maybeSingle()`) — the fuzzy-fallback lookup, which wants every row at
+ *     that timestamp. Real `@supabase/supabase-js` builders are themselves
+ *     thenable, so awaiting one without `.maybeSingle()` resolves to
+ *     `{ data: [...], error }` — mimicked here via `.then()`.
+ */
 function fakeSupabase(opts: {
   existing?: { id: string } | null;
   selectError?: unknown;
+  sameTimeRows?: { id: string; title: string }[];
+  sameTimeError?: unknown;
   insertError?: unknown;
   updateError?: unknown;
 } = {}) {
   const calls: RecordedCall[] = [];
 
   const from = (table: string) => ({
-    select() {
-      const call: RecordedCall = { table, op: "select", filters: {} };
-      calls.push(call);
+    select(columns: string) {
+      const filters: Record<string, unknown> = {};
       const builder = {
         eq(column: string, value: unknown) {
-          call.filters[column] = value;
+          filters[column] = value;
           return builder;
         },
-        maybeSingle: async () => ({
-          data: opts.existing ?? null,
-          error: opts.selectError ?? null,
-        }),
+        maybeSingle: async () => {
+          calls.push({ table, op: "select-single", filters, columns });
+          return { data: opts.existing ?? null, error: opts.selectError ?? null };
+        },
+        then(onResolve: (v: { data: unknown; error: unknown }) => unknown, onReject: (e: unknown) => unknown) {
+          calls.push({ table, op: "select-many", filters, columns });
+          return Promise.resolve({
+            data: opts.sameTimeRows ?? [],
+            error: opts.sameTimeError ?? null,
+          }).then(onResolve, onReject);
+        },
       };
       return builder;
     },
@@ -129,7 +147,7 @@ describe("upsertScrapedEvent — dedup lookup", () => {
     const { client, calls } = fakeSupabase({ existing: null });
     await upsertScrapedEvent(client, INPUT);
 
-    const select = calls.find((c) => c.op === "select")!;
+    const select = calls.find((c) => c.op === "select-single")!;
     assert.deepEqual(select.filters, {
       title: "Jül Sezar",
       start_at: "2026-09-18T17:00:00.000Z",
@@ -143,8 +161,65 @@ describe("upsertScrapedEvent — dedup lookup", () => {
     const { client, calls } = fakeSupabase({ existing: null });
     await upsertScrapedEvent(client, INPUT);
 
-    const select = calls.find((c) => c.op === "select")!;
+    const select = calls.find((c) => c.op === "select-single")!;
     assert.ok(!("venue_id" in select.filters));
+  });
+});
+
+describe("upsertScrapedEvent — fuzzy fallback (worded differently across sources)", () => {
+  // Real case, confirmed live on 2026-09-16: biletix had "Büyük Afrika
+  // Sirki", bubilet scraped the same showtime as "Büyük Afrika Sirki
+  // Oyunu" — two cards for one real event until this fallback existed.
+  test("finds a match via normalized title when the exact match misses", async () => {
+    const { client, calls } = fakeSupabase({
+      existing: null,
+      sameTimeRows: [{ id: "existing-uuid", title: "Büyük Afrika Sirki" }],
+    });
+    const result = await upsertScrapedEvent(client, { ...INPUT, title: "Büyük Afrika Sirki Oyunu" });
+
+    assert.deepEqual(result, { action: "updated" });
+    const update = calls.find((c) => c.op === "update")!;
+    assert.deepEqual(update.filters, { id: "existing-uuid" });
+  });
+
+  test("only searches rows at the same start_at, not the whole table", async () => {
+    const { client, calls } = fakeSupabase({ existing: null, sameTimeRows: [] });
+    await upsertScrapedEvent(client, INPUT);
+
+    const fallback = calls.find((c) => c.op === "select-many")!;
+    assert.deepEqual(fallback.filters, { start_at: INPUT.start_at });
+  });
+
+  test("does not overwrite the existing title on a fuzzy-matched update", async () => {
+    // Otherwise the displayed title would flip-flop depending on which
+    // source's cron step happens to run last.
+    const { client, calls } = fakeSupabase({
+      existing: null,
+      sameTimeRows: [{ id: "existing-uuid", title: "Büyük Afrika Sirki" }],
+    });
+    await upsertScrapedEvent(client, { ...INPUT, title: "Büyük Afrika Sirki Oyunu" });
+
+    const update = calls.find((c) => c.op === "update")!;
+    assert.ok(!("title" in update.payload!), "update payload must not contain `title`");
+  });
+
+  test("does not fuzzy-match an unrelated event at the same start_at", async () => {
+    const { client, calls } = fakeSupabase({
+      existing: null,
+      sameTimeRows: [{ id: "other-uuid", title: "Tamamen Farklı Bir Etkinlik" }],
+    });
+    const result = await upsertScrapedEvent(client, INPUT);
+
+    assert.deepEqual(result, { action: "inserted" });
+    assert.equal(calls.filter((c) => c.op === "insert").length, 1);
+  });
+
+  test("a failed fallback lookup is reported as an error, not silently inserted", async () => {
+    const { client, calls } = fakeSupabase({ existing: null, sameTimeError: { message: "boom" } });
+    const result = await upsertScrapedEvent(client, INPUT);
+
+    assert.equal(result.action, "error");
+    assert.equal(calls.filter((c) => c.op === "insert").length, 0);
   });
 });
 
@@ -168,6 +243,17 @@ describe("upsertScrapedEvent — updating an existing event", () => {
 
     const update = calls.find((c) => c.op === "update")!;
     assert.ok(!("status" in update.payload!), "update payload must not contain `status`");
+  });
+
+  test("never writes title on update, even on an exact match", async () => {
+    // Excluded unconditionally (not just for fuzzy matches) — see the
+    // fuzzy-fallback tests below for why. A no-op for an exact match since
+    // the strings are already identical.
+    const { client, calls } = fakeSupabase({ existing: { id: "event-uuid" } });
+    await upsertScrapedEvent(client, INPUT);
+
+    const update = calls.find((c) => c.op === "update")!;
+    assert.ok(!("title" in update.payload!), "update payload must not contain `title`");
   });
 
   test("still refreshes content that legitimately changes between runs", async () => {

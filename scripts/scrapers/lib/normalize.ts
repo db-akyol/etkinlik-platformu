@@ -69,3 +69,40 @@ export function stripDateTimeOffset(input: string): string {
 export function formatPriceTL(amount: number): string {
   return `${Math.round(amount).toLocaleString("tr-TR")} TL`;
 }
+
+/**
+ * Collapses a title down to a bare comparison key for the FALLBACK dedup
+ * lookup in upsert-event.ts — never stored or displayed, only compared.
+ *
+ * The plain `(title, start_at)` exact match misses real cross-source
+ * duplicates that upsert-event.ts's header always said it would ("Dedublüman"
+ * vs "Dedublüman Konseri" was the hypothetical; adding bubilet.ts made it a
+ * real, visible one — "Büyük Afrika Sirki" vs "Büyük Afrika Sirki Oyunu",
+ * "TUANA" vs "Tuana", etc., confirmed against production on 2026-09-16). This
+ * strips the genre/format words sources inconsistently append or omit
+ * ("Konseri", "Oyunu", ...) and all punctuation/spacing, so those collapse to
+ * the same key. It intentionally does NOT attempt real fuzzy matching (typos,
+ * word reordering, translation) — only this specific, observed pattern.
+ */
+export function normalizeTitleForDedup(title: string): string {
+  const withoutNoiseWords = title
+    .toLocaleLowerCase("tr-TR")
+    .replace(/\b(konseri|tiyatrosu|tiyatro|oyunu|gösterisi|gösterimi)\b/g, "");
+  return withoutNoiseWords.replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+/**
+ * Whether two titles are close enough to be the same event for dedup
+ * purposes — equal after `normalizeTitleForDedup`, or one contained in the
+ * other (a source appending extra context, e.g. a city name). Shared by
+ * upsert-event.ts's live fallback lookup and
+ * scripts/scrapers/merge-duplicate-events.ts's one-off cleanup of rows
+ * inserted before that fallback existed, so the two can't silently drift
+ * apart on what counts as "the same event".
+ */
+export function titlesMatchForDedup(a: string, b: string): boolean {
+  const na = normalizeTitleForDedup(a);
+  const nb = normalizeTitleForDedup(b);
+  if (!na || !nb) return false;
+  return na === nb || na.includes(nb) || nb.includes(na);
+}

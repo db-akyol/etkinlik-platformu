@@ -75,6 +75,24 @@ def pick_image_url(files):
     return f"https://www.bubilet.com.tr{rel_url}" if rel_url.startswith("/") else rel_url
 
 
+def is_actually_diyarbakir(item):
+    """bubilet's `city/{id}/tag/{id}` filter is not reliable on its own — a
+    nationally-touring event (confirmed live example: "Bosphorus Open Air
+    Metal Fest", venue in Istanbul) came back from `city/21/...` anyway,
+    presumably because bubilet cross-lists some events into every city's
+    feed for promotion. Each *venue* entry carries its own real `cityId`
+    though (session-level data, not the city/tag URL parameter), which is
+    what venues.html actually uses to place the event on a map — trust that
+    instead. An item with no venue city info at all is let through rather
+    than dropped, since we'd rather show an uncertain event than silently
+    lose a real Diyarbakır one to a missing field."""
+    venues = item.get("venues") or []
+    city_ids = [v.get("cityId") for v in venues if v.get("cityId") is not None]
+    if not city_ids:
+        return True
+    return CITY_ID in city_ids
+
+
 def parse_item(item, category_name):
     venues = item.get("venues") or []
     venue_name = venues[0].get("name") if venues else None
@@ -124,6 +142,7 @@ def main():
     # appear under more than one category tag) — first tag wins, in the
     # dict's key order above.
     events_by_id = {}
+    other_city_dropped = 0
     tag_items = list(TAG_TO_CATEGORY.items())
     for index, (tag_id, category_name) in enumerate(tag_items):
         raw_items = fetch_tag(scraper, tag_id, category_name)
@@ -131,6 +150,9 @@ def main():
         for raw in raw_items:
             event_id = raw.get("id")
             if event_id is None or event_id in events_by_id:
+                continue
+            if not is_actually_diyarbakir(raw):
+                other_city_dropped += 1
                 continue
             events_by_id[event_id] = parse_item(raw, category_name)
 
@@ -140,7 +162,11 @@ def main():
             time.sleep(1)
 
     events = list(events_by_id.values())
-    print(f"[bubilet_fetch] {len(events)} unique event(s) across all tags", file=sys.stderr)
+    print(
+        f"[bubilet_fetch] {len(events)} unique event(s) across all tags "
+        f"({other_city_dropped} dropped as actually-another-city, e.g. a nationally-touring event)",
+        file=sys.stderr,
+    )
 
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(events, f, ensure_ascii=False)

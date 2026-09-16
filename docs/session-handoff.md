@@ -5,8 +5,10 @@ ettirebilsin diye. Projenin orijinal planı için
 [`docs/plan.md`](./plan.md); scraper'ların ayrıntısı için
 [`scripts/scrapers/README.md`](../scripts/scrapers/README.md).
 
-**Son güncelleme:** 2026-09-16 — bubilet.com.tr 4. kaynak olarak eklendi
-(bkz. "bubilet.com.tr artık scrape ediliyor" notu aşağıda).
+**Son güncelleme:** 2026-09-16 — bubilet.com.tr 4. kaynak olarak eklendi,
+sonra production'da görülen iki gerçek sorun düzeltildi: çapraz-kaynak
+duplike etkinlikler (bkz. "Dedup ve moderasyon") ve yanlış şehirden bir
+etkinlik (bkz. "bubilet.com.tr artık scrape ediliyor" notu aşağıda).
 
 ---
 
@@ -27,10 +29,10 @@ manuel giriş sadece ulaşılamayan etkinlikler için yedektir.
   - `biletinial.com` — ~85 etkinlik/çalıştırma
   - `biletix.com` — ~32 etkinlik/çalıştırma
   - `diyarbakir.bel.tr` (Büyükşehir Belediyesi) — şu an 0 (aşağıya bakın)
-  - `bubilet.com.tr` — ~59 etkinlik/çalıştırma (Konser/Tiyatro/Atölye/Spor
+  - `bubilet.com.tr` — ~57 etkinlik/çalıştırma (Konser/Tiyatro/Atölye/Spor
     kategorilerinden; Cloudflare bypass gerektiren tek kaynak, aşağıya bakın)
 - **PWA katmanı** — manifest, service worker, offline sayfası.
-- **Test + CI** — `npm test` (137 test, ağ/DB gerektirmez) ve her push'ta
+- **Test + CI** — `npm test` (167 test, ağ/DB gerektirmez) ve her push'ta
   typecheck + lint + test çalıştıran `.github/workflows/ci.yml`.
 
 **Görsel kimlik not:** public site'ta indigo aksan rengi "Dicle" tonuna
@@ -95,9 +97,22 @@ kaldı). **Bir kaynaktan gelen iki zaman damgasını karşılaştırırken önce
 
 ## Dedup ve moderasyon
 
-- Dedup anahtarı **sadece `(title, start_at)`** — `venue_id` bilerek dışarıda.
-  İki kaynak aynı mekânı farklı yazıyor ("... Kültür ve Kongre Merkezi" vs
-  "... KKM"), bu da aynı etkinliğin iki kez listelenmesine yol açıyordu.
+- Dedup anahtarı **`(title, start_at)` tam eşleşme + normalize edilmiş
+  başlık fallback'i**. `venue_id` bilerek dışarıda (iki kaynak aynı mekânı
+  farklı yazıyor — "... Kültür ve Kongre Merkezi" vs "... KKM"). Tam
+  eşleşme bulunamazsa `upsertScrapedEvent` aynı `start_at`'teki satırları
+  çekip `normalizeTitleForDedup`/`titlesMatchForDedup`'la ("Konseri",
+  "Oyunu" gibi tür sözcüklerini ve noktalama işaretlerini atan, eşitlik VEYA
+  içerme kontrolü yapan) karşılaştırıyor. 2026-09-16'da bubilet eklenince
+  bu gerçek bir prod bug'ıydı: "Büyük Afrika Sirki" (biletix) vs "Büyük
+  Afrika Sirki Oyunu" (bubilet) canlıda iki ayrı kart olarak görünüyordu.
+  Detay ve gerekçe: `scripts/scrapers/lib/upsert-event.ts`'nin başlığı.
+  Bu fallback **yeni** satırları korur — o tarihten önce oluşmuş çift
+  kayıtlar için `scripts/scrapers/merge-duplicate-events.ts` var (tek
+  seferlik, dry-run varsayılan, `--apply` ile siler; hangi DB'ye bağlıysa
+  `.env.local`/ortam değişkenleri onu temizler — **production'ı temizlemek
+  için o değişkenleri bilerek production'a yönlendirmek gerekiyor**, ayrı
+  bir "prod modu" yok).
 - Scraped etkinlikler **doğrudan `approved`** olarak giriyor; onay kuyruğu
   kaldırıldı (kaynakların hepsi resmi bilet satıcısı ya da belediyenin
   kendisi). Ama bir admin elle "reddet" derse, sonraki scrape içeriği
@@ -129,6 +144,11 @@ kaldı). **Bir kaynaktan gelen iki zaman damgasını karşılaştırırken önce
   Python bağımlılığı bu. Detaylar ve gerekçe: `bubilet_fetch.py`'nin
   başlığı ve `scripts/scrapers/README.md`. Bu, bir sonraki engellenmiş
   kaynak için otomatik bir emsal değil — her seferinde ayrı bir karar.
+  **Ayrıca:** bubilet'in `city/{id}/tag/{id}` filtresi güvenilir değil —
+  ulusal turneye çıkan bir etkinlik (örn. "Bosphorus Open Air Metal Fest",
+  gerçek mekânı İstanbul) `city/21` (Diyarbakır) altında da döndü.
+  `bubilet_fetch.py` artık her mekânın kendi `cityId`'sini kontrol edip
+  gerçekten Diyarbakır olmayanları atıyor (`is_actually_diyarbakir`).
 - **PWA ikonları hâlâ placeholder** (turuncu kare + "E").
 - **Web push bildirimleri yok** (plan.md Faz 1'de var, ertelendi).
 - `.env.local` yerel Supabase'i (`127.0.0.1:54321`) gösteriyor. Scraper'ları
@@ -144,7 +164,7 @@ kaldı). **Bir kaynaktan gelen iki zaman damgasını karşılaştırırken önce
 npx supabase start   # yerel Supabase (Docker Desktop açık olmalı)
 npm run dev          # http://localhost:3000
 
-npm test             # 137 test, ağ ve DB gerektirmez, ~0.5 sn
+npm test             # 167 test, ağ ve DB gerektirmez, ~0.5 sn
 npm run typecheck
 npm run lint
 npm run scrape       # dört scraper'ı da çalıştırır (.env.local'deki DB'ye yazar)
@@ -190,10 +210,12 @@ sürece admin olmazlar.
 1. **Daha fazla kaynak.** Asıl hedef bu — bubilet eklendi (bkz. yukarısı),
    sırada belediye/bubilet dışındaki kurumlar (üniversiteler, kültür
    merkezleri, mekânların kendi siteleri) ve plan.md'deki Instagram fikri.
-2. **`(title, start_at)` dedup'ının bilinen sınırı** — bubilet'in "X
-   Konseri" gibi başlık ekleri diğer kaynaklarla tam eşleşmeyebilir; canlıda
-   gerçek bir çift kayıt görülürse bu ilk şüphelenilecek yer (bkz.
-   `lib/upsert-event.ts`'nin başlığı).
+2. **`(title, start_at)` dedup'ının kalan sınırı** — 2026-09-16'da eklenen
+   normalize edilmiş başlık fallback'i ("Konseri"/"Oyunu" gibi ekleri ve
+   noktalamayı atan eşitlik/içerme kontrolü) bilinen vakaların hepsini
+   çözdü, ama gerçek fuzzy matching (yazım hatası, kelime sırası,
+   çeviri farkı) değil — canlıda yeni bir çift kayıt türü görülürse
+   ilk şüphelenilecek yer `lib/normalize.ts`'teki `titlesMatchForDedup`.
 3. **PWA ikonlarını gerçek marka görseliyle değiştirmek.**
 4. **Web push bildirimleri.**
 5. Bir kaynak sessizce bozulduğunda haber veren bir uyarı mekanizması —
