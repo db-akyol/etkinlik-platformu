@@ -4,20 +4,52 @@
  * "Dicle" accent — named after the Tigris river that runs past Diyarbakır.
  * Replaces the generic indigo accent everywhere; the rest of the palette
  * (zinc grays, white/near-black surfaces) is untouched on purpose.
+ *
+ * The accent is TWO tokens, not one, and the split is load-bearing:
+ *
+ *   --color-dicle      the accent itself. It has to stay legible as TEXT on
+ *                      the page background, so in dark mode it has to be
+ *                      light (#2dd4bf on #0a0a0a is 10.6:1).
+ *   --color-on-dicle   whatever sits ON a `bg-dicle` fill. Deriving this from
+ *                      the accent is exactly the bug this split fixes: dark
+ *                      mode used `bg-dicle text-white`, i.e. white on
+ *                      #2dd4bf, which is 1.86:1 — far under WCAG AA's 4.5:1,
+ *                      so every primary button's label was effectively
+ *                      unreadable. Dark mode now puts near-black on the
+ *                      bright teal instead (7.8:1).
+ *
+ * Use `bg-dicle text-on-dicle` for filled controls and `text-dicle` for
+ * accent text. Never `bg-dicle text-white`.
  */
 :root {
-  --background: #ffffff;
+  color-scheme: light;
+
+  /* A hair off pure white so a white card reads as a raised surface rather
+   * than dissolving into the page. */
+  --background: #fafafa;
   --foreground: #171717;
+
+  --surface: #ffffff;
+  --surface-muted: #f4f4f5;
+
+  --line: rgba(0, 0, 0, 0.08);
+  --line-strong: rgba(0, 0, 0, 0.14);
 
   --color-dicle: #0f6e78;
   --color-dicle-dim: #0c5960;
+  --color-on-dicle: #ffffff;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-dicle: var(--color-dicle);
   --color-dicle-dim: var(--color-dicle-dim);
+  --color-on-dicle: var(--color-on-dicle);
   --font-sans: var(--font-geist-sans);
   --font-display: var(--font-space-grotesk);
   --font-mono: var(--font-geist-mono);
@@ -25,15 +57,64 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    /* Tells the browser to render native widgets (select dropdowns, date
+     * pickers, scrollbars, autofill) dark. Without it they paint light-mode
+     * chrome onto dark surfaces. */
+    color-scheme: dark;
+
     --background: #0a0a0a;
     --foreground: #ededed;
+
+    --surface: #18181b;
+    --surface-muted: #27272a;
+
+    --line: rgba(255, 255, 255, 0.10);
+    --line-strong: rgba(255, 255, 255, 0.18);
+
     --color-dicle: #2dd4bf;
-    --color-dicle-dim: #14b8a6;
+    /* Hover LIFTS in dark mode — the fill is already bright, so the dim
+     * token goes lighter here where it goes darker in light mode. */
+    --color-dicle-dim: #5eead4;
+    --color-on-dicle: #062a28;
   }
+}
+
+html {
+  /* Both sticky bars (header at top-0, filter bar at top-14) would otherwise
+   * cover an element the browser just scrolled a keyboard focus or an #anchor
+   * to. Reserve their combined height. */
+  scroll-padding-top: 9rem;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Geist is loaded and preloaded by app/layout.tsx. This used to read
+   * `Arial, Helvetica, sans-serif`, which meant the font was downloaded on
+   * every visit and then painted zero glyphs — the whole site rendered in
+   * Arial. */
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+/*
+ * One focus style for the whole app. `:focus-visible` (not `:focus`) so a
+ * mouse click on a button doesn't leave a ring behind, but tabbing to it
+ * does. Anything that sets `outline-none` opts out of this and has to
+ * provide its own ring — prefer not to.
+ */
+:focus-visible {
+  outline: 2px solid var(--color-dicle);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

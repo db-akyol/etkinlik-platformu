@@ -12,7 +12,7 @@ export interface EventFormDefaults {
 }
 
 const FIELD_CLASS =
-  "rounded-md border border-black/20 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/40";
+  "rounded-md border border-black/20 bg-transparent px-3 py-2 text-sm focus:border-black/40 dark:border-white/20 dark:focus:border-white/40";
 
 export function EventFormFields({
   venues,

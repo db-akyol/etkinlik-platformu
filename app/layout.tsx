@@ -21,13 +21,22 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Türkiye Etkinlik Platformu",
+  title: {
+    default: "Diyarbakır Etkinlik — Şehirdeki tüm etkinlikler",
+    template: "%s | Diyarbakır Etkinlik",
+  },
   description:
     "Diyarbakır'daki konser, tiyatro, atölye, fuar ve spor etkinliklerini tek yerden keşfedin.",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0f6e78",
+  // Matches the site header's `bg-background/95 backdrop-blur` (app/(public)/layout.tsx),
+  // which reads as the page background color, not the accent — so mobile
+  // browser chrome sits flush with the header instead of clashing with it.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+  ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

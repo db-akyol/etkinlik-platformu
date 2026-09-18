@@ -10,11 +10,19 @@ export default async function PublicLayout({ children }: { children: React.React
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-30 border-b border-black/10 bg-background/95 backdrop-blur dark:border-white/10">
+      {/* First focusable element on every public page. Invisible until it
+          receives keyboard focus, so mouse/touch users never see it. */}
+      <a
+        href="#icerik"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-surface focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:shadow-md"
+      >
+        İçeriğe geç
+      </a>
+      <header className="sticky top-0 z-30 border-b border-line bg-background/95 backdrop-blur">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
           <Link
             href="/"
-            className="font-display flex items-center gap-1.5 text-base font-semibold tracking-tight text-zinc-900 dark:text-zinc-50"
+            className="font-display flex items-center gap-1.5 text-base font-semibold tracking-tight text-foreground"
           >
             <span className="h-2 w-2 rounded-full bg-dicle" aria-hidden="true" />
             Diyarbakır <span className="text-dicle">Etkinlik</span>
@@ -32,7 +40,7 @@ export default async function PublicLayout({ children }: { children: React.React
                 <form action={signOutPublic}>
                   <button
                     type="submit"
-                    className="rounded-md border border-black/20 px-3 py-1.5 text-sm hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                    className="rounded-md border border-line-strong px-3 py-1.5 text-sm hover:bg-surface-muted"
                   >
                     Çıkış Yap
                   </button>
@@ -48,7 +56,7 @@ export default async function PublicLayout({ children }: { children: React.React
                 </Link>
                 <Link
                   href="/kayit"
-                  className="rounded-md bg-dicle px-3 py-1.5 font-medium text-white hover:bg-dicle-dim"
+                  className="rounded-md bg-dicle px-3 py-1.5 font-medium text-on-dicle hover:bg-dicle-dim"
                 >
                   Kayıt Ol
                 </Link>
@@ -57,7 +65,12 @@ export default async function PublicLayout({ children }: { children: React.React
           </nav>
         </div>
       </header>
-      <div className="flex flex-1 flex-col">{children}</div>
+      {/* The one <main> landmark for the whole public app — every page below
+          renders its own title block as a plain <div>, not <header>, so this
+          stays the only `banner`/`main` pairing (see skip link above). */}
+      <main id="icerik" className="flex flex-1 flex-col">
+        {children}
+      </main>
     </div>
   );
 }

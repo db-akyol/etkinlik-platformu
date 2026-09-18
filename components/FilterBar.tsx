@@ -58,12 +58,16 @@ export default function FilterBar({ categories }: { categories: Category[] }) {
 
   return (
     <div className="flex flex-col gap-4">
+      <label htmlFor="etkinlik-arama" className="sr-only">
+        Etkinlik veya mekan ara
+      </label>
       <input
+        id="etkinlik-arama"
         type="search"
         value={searchInput}
         onChange={(e) => handleSearchChange(e.target.value)}
         placeholder="Etkinlik, mekan ara..."
-        className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
+        className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-foreground"
       />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap gap-2">
@@ -72,18 +76,23 @@ export default function FilterBar({ categories }: { categories: Category[] }) {
               key={filter.value || "tumu"}
               type="button"
               onClick={() => updateParam("tarih", filter.value)}
+              aria-pressed={activeDate === filter.value}
               className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
                 activeDate === filter.value
-                  ? "bg-dicle text-white"
-                  : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                  ? "bg-dicle text-on-dicle"
+                  : "bg-surface-muted text-foreground/70 hover:bg-line-strong"
               }`}
             >
               {filter.label}
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex rounded-lg border border-black/10 p-0.5 dark:border-white/10">
+        {/* flex-wrap: at 360px the view toggle and the category select
+         * don't both fit on one row. Wrapping (rather than shrinking the
+         * select, which native selects don't do predictably) drops the
+         * select to its own line instead of overflowing the viewport. */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex rounded-lg border border-line p-0.5">
             {(
               [
                 { value: "liste", label: "Liste" },
@@ -94,10 +103,11 @@ export default function FilterBar({ categories }: { categories: Category[] }) {
                 key={view.value}
                 type="button"
                 onClick={() => updateParam("gorunum", view.value === "liste" ? "" : view.value)}
+                aria-pressed={activeView === view.value}
                 className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
                   activeView === view.value
-                    ? "bg-dicle text-white"
-                    : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    ? "bg-dicle text-on-dicle"
+                    : "text-foreground/70 hover:bg-surface-muted"
                 }`}
               >
                 {view.label}
@@ -105,11 +115,11 @@ export default function FilterBar({ categories }: { categories: Category[] }) {
             ))}
           </div>
           <label className="flex items-center gap-2 text-sm">
-            <span className="text-zinc-600 dark:text-zinc-400">Kategori</span>
+            <span className="text-foreground/70">Kategori</span>
             <select
               value={activeCategory}
               onChange={(e) => updateParam("kategori", e.target.value)}
-              className="rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm text-zinc-900 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
+              className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-foreground"
             >
               <option value="">Tüm Kategoriler</option>
               {categories.map((category) => (

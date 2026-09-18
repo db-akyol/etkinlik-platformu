@@ -22,16 +22,18 @@ const EVENT_SELECT =
 
 type PageParams = { id: string };
 
-async function getApprovedEvent(id: string): Promise<EventWithRelations | null> {
+async function getApprovedEvent(id: string) {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("events")
     .select<typeof EVENT_SELECT, EventWithRelations>(EVENT_SELECT)
     .eq("id", id)
     .eq("status", "approved")
     .maybeSingle();
 
-  return data;
+  if (error) console.error(`[etkinlik/${id}] event lookup failed:`, error);
+
+  return { event: data, error };
 }
 
 export async function generateMetadata({
@@ -40,10 +42,13 @@ export async function generateMetadata({
   params: Promise<PageParams>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const event = await getApprovedEvent(id);
+  // Metadata can't throw its way to app/(public)/error.tsx — a lookup failure
+  // falls back to the same not-found title the page component itself never
+  // reaches, since it throws instead (see below).
+  const { event, error } = await getApprovedEvent(id);
 
-  if (!event) {
-    return { title: "Etkinlik bulunamadı | Diyarbakır Etkinlikleri" };
+  if (!event || error) {
+    return { title: "Etkinlik bulunamadı | Diyarbakır Etkinlik" };
   }
 
   const description =
@@ -51,7 +56,7 @@ export async function generateMetadata({
     `${event.title} - ${formatEventDateTime(event.start_at)}`;
 
   return {
-    title: `${event.title} | Diyarbakır Etkinlikleri`,
+    title: `${event.title} | Diyarbakır Etkinlik`,
     description,
     openGraph: {
       title: event.title,
@@ -67,7 +72,15 @@ export default async function EventDetailPage({
   params: Promise<PageParams>;
 }) {
   const { id } = await params;
-  const event = await getApprovedEvent(id);
+  const { event, error } = await getApprovedEvent(id);
+
+  // A real PostgREST failure is not "this event doesn't exist" — surfacing
+  // it as a 404 would hide a transient outage on a page for a live event.
+  // Throwing here lets app/(public)/error.tsx render a recoverable error
+  // instead.
+  if (error) {
+    throw error;
+  }
 
   if (!event) {
     notFound();
@@ -95,7 +108,7 @@ export default async function EventDetailPage({
         ← Tüm etkinlikler
       </Link>
 
-      <article className="overflow-hidden rounded-xl border border-black/10 dark:border-white/10">
+      <article className="overflow-hidden rounded-xl border border-line">
         <div className="relative aspect-[16/9] w-full bg-zinc-200 dark:bg-zinc-800">
           {event.image_url ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -106,7 +119,7 @@ export default async function EventDetailPage({
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-dicle to-dicle-dim">
-              <span className="text-lg font-medium text-white/90">
+              <span className="text-lg font-medium text-on-dicle">
                 {event.category?.name ?? "Etkinlik"}
               </span>
             </div>
@@ -120,18 +133,20 @@ export default async function EventDetailPage({
                 {event.category.name}
               </span>
             )}
-            <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+            <span className="rounded-full bg-surface-muted px-3 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-300">
               {formatEventPrice(event.price)}
             </span>
             <FavoriteButton
               eventId={event.id}
               initialFavorited={isFavorited}
               isLoggedIn={!!user}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-black/10 text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-white/10 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-line text-zinc-700 transition-colors hover:bg-surface-muted dark:text-zinc-300"
             />
           </div>
 
-          <h1 className="font-display text-2xl font-bold text-zinc-900 dark:text-zinc-50 sm:text-3xl">
+          {/* Bigger than the listing page's h1 on purpose — this is the more
+              important heading of the two, and used to render smaller. */}
+          <h1 className="font-display text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
             {event.title}
           </h1>
 
@@ -164,7 +179,9 @@ export default async function EventDetailPage({
           )}
 
           {event.description && (
-            <p className="whitespace-pre-line text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
+            // max-w-prose caps the line length at a comfortable reading
+            // measure (~65ch) regardless of how wide the article column is.
+            <p className="max-w-prose whitespace-pre-line text-base leading-relaxed text-zinc-700 dark:text-zinc-300">
               {event.description}
             </p>
           )}
@@ -176,7 +193,7 @@ export default async function EventDetailPage({
                 href={event.source_url}
                 target="_blank"
                 rel="noopener noreferrer nofollow"
-                className="underline hover:text-dicle"
+                className="break-all underline hover:text-dicle"
               >
                 {event.source_url}
               </a>
