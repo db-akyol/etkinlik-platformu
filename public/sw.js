@@ -91,6 +91,11 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  // Vercel Web Analytics serves its script from /_vercel/insights/. It ends
+  // in .js, so without this it would fall into the cache-first static-asset
+  // branch below and get pinned at whatever version was fetched first.
+  if (url.pathname.startsWith("/_vercel/")) return;
+
   if (request.mode === "navigate") {
     event.respondWith(networkFirst(request));
     return;

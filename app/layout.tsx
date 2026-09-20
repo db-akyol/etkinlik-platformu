@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import "./globals.css";
 
@@ -48,6 +49,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         <ServiceWorkerRegister />
         {children}
+        {/* Vercel Web Analytics: cookieless page-view counting. It only
+         * reports from a Vercel deployment; locally it just logs to the
+         * console. public/sw.js deliberately ignores /_vercel/ so the
+         * script it loads never gets pinned in the service worker cache. */}
+        <Analytics />
       </body>
     </html>
   );
