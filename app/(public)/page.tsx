@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
 import EventCard, { type EventWithRelations } from "@/components/EventCard";
@@ -16,6 +17,17 @@ import type { Category, City } from "@/lib/supabase/types";
 // the individual fetch()es inside it are uncached) — force every request to
 // hit Supabase for real, current data.
 export const dynamic = "force-dynamic";
+
+// Every filtered view (?kategori=, ?tarih=, ?q=, ?gorunum=) is the same set of
+// events in a different order or subset, so they all point back to the bare
+// listing instead of competing with it for the same search results.
+//
+// Only `alternates` is set: Next merges metadata shallowly, so re-declaring
+// `openGraph` here just to add a `url` would discard the image, title and
+// description the root layout supplies.
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 // Keep this in sync with EventWithRelations in components/EventCard.tsx.
 const EVENT_SELECT =

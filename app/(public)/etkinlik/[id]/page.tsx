@@ -55,13 +55,36 @@ export async function generateMetadata({
     event.description?.slice(0, 160) ??
     `${event.title} - ${formatEventDateTime(event.start_at)}`;
 
+  // Next merges metadata shallowly, so this `openGraph` replaces the root
+  // layout's outright — `type`, `locale` and `siteName` have to be repeated
+  // here or they are simply lost on the pages most likely to be shared.
+  const path = `/etkinlik/${event.id}`;
+  // Falls back to the site-wide card when an event has no poster, so a shared
+  // link never previews as a bare URL.
+  const images = event.image_url ? [event.image_url] : ["/og-default.png"];
+
   return {
     title: `${event.title} | Diyarbakır Etkinlik`,
     description,
+    alternates: { canonical: path },
     openGraph: {
+      type: "website",
+      locale: "tr_TR",
+      siteName: "Diyarbakır Etkinlik",
+      url: path,
       title: event.title,
       description,
-      images: event.image_url ? [event.image_url] : undefined,
+      images,
+    },
+    // `twitter` has to be repeated for the same shallow-merge reason as
+    // `openGraph`. Leaving it out does not fall through to the Open Graph
+    // tags — it inherits the root layout's, so every shared event previewed
+    // on X as the generic site title with the generic card image.
+    twitter: {
+      card: "summary_large_image",
+      title: event.title,
+      description,
+      images,
     },
   };
 }

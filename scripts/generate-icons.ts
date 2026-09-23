@@ -9,6 +9,7 @@
  *   public/icons/icon-512.png  (manifest, purpose "maskable" + "any")
  *   app/icon.png               (browser tab favicon, Next.js file convention)
  *   app/apple-icon.png         (iOS home-screen icon, Next.js file convention)
+ *   public/og-default.png      (1200x630 Open Graph card, app/layout.tsx)
  *
  * There's no image library in this project (and it shouldn't grow one just
  * for four static PNGs), but `playwright` is already a dependency, so this
@@ -67,32 +68,76 @@ function buildIconSvg(size: number): string {
 </svg>`;
 }
 
-type Target = { size: number; outFile: string };
+// Open Graph's de-facto standard card size. Everything that renders a link
+// preview (WhatsApp, X, Slack, Telegram, Facebook) is happy with 1200x630.
+const OG_W = 1200;
+const OG_H = 630;
+
+/**
+ * The card shown when the SITE's own URL is shared — event pages use the
+ * event's own poster instead, and only fall back to this.
+ *
+ * Rendered in real Chromium rather than with an image library or a runtime
+ * ImageResponse, specifically because of the text: "Diyarbakır" and
+ * "Şehirdeki" need a dotless ı, a ğ and a Ş, and a renderer with an
+ * incomplete font falls back to tofu boxes on exactly the brand name. Real
+ * Chromium with a real font stack cannot get that wrong.
+ */
+function buildOgSvg(): string {
+  const pinScale = 150 / PIN_VIEWBOX_H;
+  const pinW = PIN_VIEWBOX_W * pinScale;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${OG_W}" height="${OG_H}" viewBox="0 0 ${OG_W} ${OG_H}">
+  <rect width="${OG_W}" height="${OG_H}" fill="${DICLE}"/>
+  <g transform="translate(${(OG_W - pinW) / 2}, 96) scale(${pinScale})">
+    <path d="${PIN_PATH}" fill="#ffffff"/>
+    <circle cx="14" cy="14" r="${PIN_HOLE_R}" fill="${DICLE}"/>
+  </g>
+  <text x="${OG_W / 2}" y="360" text-anchor="middle"
+        font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+        font-size="86" font-weight="700" fill="#ffffff">Diyarbakır Etkinlik</text>
+  <text x="${OG_W / 2}" y="432" text-anchor="middle"
+        font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+        font-size="38" font-weight="400" fill="#ffffff" opacity="0.85">Şehirdeki tüm etkinlikler tek yerde</text>
+  <text x="${OG_W / 2}" y="536" text-anchor="middle"
+        font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+        font-size="30" font-weight="500" fill="#ffffff" opacity="0.7">Konser · Tiyatro · Atölye · Fuar · Spor</text>
+</svg>`;
+}
+
+type Target = { width: number; height: number; outFile: string; svg: string };
 
 const TARGETS: Target[] = [
-  { size: 192, outFile: "public/icons/icon-192.png" },
-  { size: 512, outFile: "public/icons/icon-512.png" },
-  { size: 32, outFile: "app/icon.png" },
-  { size: 180, outFile: "app/apple-icon.png" },
+  { width: 192, height: 192, outFile: "public/icons/icon-192.png", svg: buildIconSvg(192) },
+  { width: 512, height: 512, outFile: "public/icons/icon-512.png", svg: buildIconSvg(512) },
+  { width: 32, height: 32, outFile: "app/icon.png", svg: buildIconSvg(32) },
+  { width: 180, height: 180, outFile: "app/apple-icon.png", svg: buildIconSvg(180) },
+  { width: OG_W, height: OG_H, outFile: "public/og-default.png", svg: buildOgSvg() },
 ];
 
 async function main() {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage();
-    for (const { size, outFile } of TARGETS) {
-      await page.setViewportSize({ width: size, height: size });
-      const svg = buildIconSvg(size);
+    for (const { width, height, outFile, svg } of TARGETS) {
+      await page.setViewportSize({ width, height });
       // The SVG's own width/height match the viewport exactly, so a plain
       // (non-full-page) screenshot captures precisely the target canvas
       // with no scrollbars or background bleed to crop.
-      const html = `<!doctype html><html><head><style>html,body{margin:0;padding:0;}</style></head><body>${svg}</body></html>`;
-      await page.goto(`data:text/html,${encodeURIComponent(html)}`);
+      //
+      // setContent, not a `data:text/html,...` URL: a data URL declares no
+      // charset, so Chromium decodes the percent-encoded UTF-8 as Latin-1 and
+      // every Turkish character in the OG card comes out as mojibake
+      // ("DiyarbakÄ±r"). The explicit <meta charset> is belt and braces.
+      const html = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;}</style></head><body>${svg}</body></html>`;
+      await page.setContent(html, { waitUntil: "load" });
+      // Text is only measured correctly once the font stack has resolved.
+      await page.evaluate(() => document.fonts.ready);
 
       const outPath = path.resolve(process.cwd(), outFile);
       await mkdir(path.dirname(outPath), { recursive: true });
       await page.screenshot({ path: outPath });
-      console.log(`wrote ${outFile} (${size}x${size})`);
+      console.log(`wrote ${outFile} (${width}x${height})`);
     }
   } finally {
     await browser.close();

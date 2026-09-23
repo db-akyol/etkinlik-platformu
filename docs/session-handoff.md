@@ -32,6 +32,18 @@ manuel giriş sadece ulaşılamayan etkinlikler için yedektir.
   - `bubilet.com.tr` — ~57 etkinlik/çalıştırma (Konser/Tiyatro/Atölye/Spor
     kategorilerinden; Cloudflare bypass gerektiren tek kaynak, aşağıya bakın)
 - **PWA katmanı** — manifest, service worker, offline sayfası.
+- **Keşfedilebilirlik (2026-09-23)** — `app/sitemap.ts` (ana sayfa + tüm
+  `approved` etkinlikler, `force-dynamic` çünkü scraper Next'i bypass ediyor),
+  `app/robots.ts` (preview deploy'larda her şeyi `disallow` eder), kök
+  layout'ta `metadataBase` + Open Graph/Twitter varsayılanları ve
+  `public/og-default.png` (üreteci: `scripts/generate-icons.ts`). Kanonik URL
+  `lib/site-url.ts`'ten gelir: `NEXT_PUBLIC_SITE_URL` → Vercel'in
+  `VERCEL_PROJECT_PRODUCTION_URL`'i → localhost. **Dikkat:** Next metadata'yı
+  *shallow* birleştirir — bir sayfa `openGraph` ya da `twitter` tanımlarsa
+  kökündekini tamamen ezer. Bu yüzden detay sayfası ikisini de baştan yazar;
+  `twitter` unutulduğunda her etkinlik X'te genel site başlığıyla
+  paylaşılıyordu. Aynı sebeple kökte `canonical`/`og:url` **yok** (miras
+  kalsaydı 150 etkinlik sayfası ana sayfanın kopyası ilan edilirdi).
 - **Test + CI** — `npm test` (167 test, ağ/DB gerektirmez) ve her push'ta
   typecheck + lint + test çalıştıran `.github/workflows/ci.yml`.
 
