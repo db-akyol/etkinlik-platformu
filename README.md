@@ -19,6 +19,14 @@ cp .env.example .env.local  # ve yukarıdaki URL/key değerleriyle doldurun
 npm run dev                 # http://localhost:3000
 ```
 
+Siteyi çalıştırmak için bu kadarı yeter. Sadece `npm run scrape` çalıştıracaksanız
+ek olarak Python 3.11+ gerekir — dört kaynaktan biri (bubilet) Cloudflare
+doğrulaması yüzünden bir Python alt sürecine ihtiyaç duyuyor (bkz. "Dikkat"):
+
+```bash
+pip install -r scripts/scrapers/requirements.txt
+```
+
 ## Komutlar
 
 | Komut | Ne yapar |
@@ -28,7 +36,7 @@ npm run dev                 # http://localhost:3000
 | `npm test` | Birim testleri (ağ ve veritabanı gerektirmez, ~0.5 sn) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm run scrape` | Üç scraper'ı da çalıştırır ve `.env.local`'deki veritabanına yazar |
+| `npm run scrape` | Dört scraper'ı da çalıştırır ve `.env.local`'deki veritabanına yazar |
 
 ## Proje yapısı
 
@@ -58,7 +66,13 @@ docs/             Plan ve oturum devir notları
   (Vercel = UTC) ve sessizce 3 saat kaydırır. `lib/istanbul-time.ts` ve
   `scripts/scrapers/lib/normalize.ts` bunun içindir.
 - **Scraping etiği.** Her kaynağın `robots.txt`'ine ve kullanım şartlarına
-  uyulur, istek hacmi düşük tutulur, her etkinlik `source_url` ile kaynağına
-  bağlanır. Bot korumasını aşmaya çalışılmaz — ayrıntısı scraper README'sinde.
+  uyulur, istek hacmi düşük tutulur (günde 2 kez), her etkinlik `source_url`
+  ile kaynağına bağlanır. Varsayılan kural bot korumasının aşılmamasıdır ve
+  bu yüzden birden fazla kaynak reddedildi. **Tek istisna bubilet.com.tr:**
+  Cloudflare doğrulamasını `cloudscraper` ile aşıyoruz
+  (`scripts/scrapers/bubilet_fetch.py`). Bu, kural bu kaynak için tekrar
+  gündeme geldikten sonra proje sahibinin bilinçli kararıdır; emsal değildir,
+  her yeni engellenen kaynak ayrı bir karardır. Gerekçenin tamamı:
+  `scripts/scrapers/README.md` ve `docs/session-handoff.md`.
 - `next`/`eslint-config-next` paketlerini 16'ya yükseltmeyin; bu ortamdaki
   Node 20.5.0 yetmiyor.
