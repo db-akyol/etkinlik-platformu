@@ -67,12 +67,6 @@ docs/             Plan ve oturum devir notları
   `scripts/scrapers/lib/normalize.ts` bunun içindir.
 - **Scraping etiği.** Her kaynağın `robots.txt`'ine ve kullanım şartlarına
   uyulur, istek hacmi düşük tutulur (günde 2 kez), her etkinlik `source_url`
-  ile kaynağına bağlanır. Varsayılan kural bot korumasının aşılmamasıdır ve
-  bu yüzden birden fazla kaynak reddedildi. **Tek istisna bubilet.com.tr:**
-  Cloudflare doğrulamasını `cloudscraper` ile aşıyoruz
-  (`scripts/scrapers/bubilet_fetch.py`). Bu, kural bu kaynak için tekrar
-  gündeme geldikten sonra proje sahibinin bilinçli kararıdır; emsal değildir,
-  her yeni engellenen kaynak ayrı bir karardır. Gerekçenin tamamı:
-  `scripts/scrapers/README.md` ve `docs/session-handoff.md`.
+  ile kaynağına bağlanır.
 - `next`/`eslint-config-next` paketlerini 16'ya yükseltmeyin; bu ortamdaki
   Node 20.5.0 yetmiyor.
