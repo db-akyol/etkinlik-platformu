@@ -1,6 +1,7 @@
 # Oturum Özeti — Diyarbakır Etkinlik Platformu
 
-Bu dosya, projenin **şu anki durumunu** anlatır: projeye yeni katılan ya da aradan zaman geçtikten sonra dönen biri işi kaldığı yerden devam
+Bu dosya, projenin **şu anki durumunu** anlatır: projeye yeni katılan ya
+da aradan zaman geçtikten sonra dönen biri işi kaldığı yerden devam
 ettirebilsin diye. Projenin orijinal planı için
 [`docs/plan.md`](./plan.md); scraper'ların ayrıntısı için
 [`scripts/scrapers/README.md`](../scripts/scrapers/README.md).
@@ -44,15 +45,16 @@ manuel giriş sadece ulaşılamayan etkinlikler için yedektir.
   `twitter` unutulduğunda her etkinlik X'te genel site başlığıyla
   paylaşılıyordu. Aynı sebeple kökte `canonical`/`og:url` **yok** (miras
   kalsaydı 150 etkinlik sayfası ana sayfanın kopyası ilan edilirdi).
-- **Test + CI** — `npm test` (167 test, ağ/DB gerektirmez) ve her push'ta
-  typecheck + lint + test çalıştıran `.github/workflows/ci.yml`.
+- **Test + CI** — `npm test` (ağ/DB gerektirmez) ve her push'ta
+  typecheck + lint + test + build çalıştıran `.github/workflows/ci.yml`.
 
 **Görsel kimlik not:** public site'ta indigo aksan rengi "Dicle" tonuna
 (`--color-dicle`, `app/globals.css`) geçti, başlıklar Space Grotesk
 fontuyla yazılıyor (`--font-display`). Kart grid'i, thumbnail'lar ve genel
-yerleşim **bilerek dokunulmadan** bırakıldı. Kural net: tasarım değişiklikleri her zaman mevcut yapının üzerine ekleme
-olmalı, yeniden tasarım değil (daha önce tam kapsamlı bir
-"Kara Amid" yeniden tasarımı denenip geri alınmıştı).
+yerleşim **bilerek dokunulmadan** bırakıldı. Kural net: tasarım
+değişiklikleri her zaman mevcut yapının üzerine ekleme olmalı, yeniden
+tasarım değil (daha önce tam kapsamlı bir "Kara Amid" yeniden tasarımı
+denenip geri alınmıştı).
 
 ## Mimari notlar
 
