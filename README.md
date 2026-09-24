@@ -34,7 +34,7 @@ pip install -r scripts/scrapers/requirements.txt
 | `npm run dev` | Geliştirme sunucusu |
 | `npm run build` | Production build |
 | `npm test` | Birim testleri (ağ ve veritabanı gerektirmez, ~0.5 sn) |
-| `npm run typecheck` | `tsc --noEmit` |
+| `npm run typecheck` | Route tiplerini üretir (`next typegen`), sonra `tsc --noEmit` |
 | `npm run lint` | ESLint |
 | `npm run scrape` | Dört scraper'ı da çalıştırır ve `.env.local`'deki veritabanına yazar |
 
