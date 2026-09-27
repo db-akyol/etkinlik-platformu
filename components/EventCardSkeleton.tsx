@@ -23,6 +23,10 @@ export default function EventCardSkeleton({ className = "" }: { className?: stri
   );
 }
 
-/** The listing's card grid, shared by the page and its loading skeletons. */
+/**
+ * The listing's card grid, shared by the page and its loading skeletons.
+ * From xl up the minimum card width grows, so extra screen width makes the
+ * posters bigger instead of only adding more, smaller columns.
+ */
 export const EVENT_GRID_CLASS =
-  "grid grid-cols-2 gap-x-3 gap-y-7 sm:grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] sm:gap-x-5 sm:gap-y-8";
+  "grid grid-cols-2 gap-x-3 gap-y-7 sm:grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] sm:gap-x-5 sm:gap-y-8 xl:grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] 2xl:grid-cols-[repeat(auto-fill,minmax(16rem,1fr))]";

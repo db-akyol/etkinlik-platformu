@@ -5,11 +5,11 @@ import EventCardSkeleton, { EVENT_GRID_CLASS } from "@/components/EventCardSkele
 // the real content swaps in.
 export default function HomeLoading() {
   return (
-    <div className="mx-auto w-full max-w-7xl flex-1 px-4 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-[90rem] 2xl:max-w-[104rem] flex-1 px-4 sm:px-6 lg:px-8">
       <div className="sr-only" role="status">
         Yükleniyor…
       </div>
-      <div className="animate-pulse md:grid md:grid-cols-[16.5rem_minmax(0,1fr)] md:gap-10 md:py-8 lg:gap-12">
+      <div className="animate-pulse md:grid md:grid-cols-[15rem_minmax(0,1fr)] md:gap-10 md:py-8">
         <div aria-hidden="true" className="hidden md:flex md:flex-col md:gap-7">
           <div className="h-72 rounded-2xl bg-surface-muted" />
           <div className="flex flex-col gap-2">

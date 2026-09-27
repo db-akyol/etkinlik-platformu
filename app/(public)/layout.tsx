@@ -23,7 +23,7 @@ export default async function PublicLayout({ children }: { children: React.React
         İçeriğe geç
       </a>
       <header className="sticky top-0 z-30 border-b border-line bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur-md">
-        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-x-6 gap-y-2.5 px-4 py-3 sm:px-6 lg:px-8">
+        <div className="mx-auto flex w-full max-w-[90rem] 2xl:max-w-[104rem] flex-wrap items-center gap-x-6 gap-y-2.5 px-4 py-3 sm:px-6 lg:px-8">
           <Link
             href="/"
             className="font-display flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-foreground"

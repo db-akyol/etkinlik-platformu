@@ -44,7 +44,7 @@ export default async function FavorilerPage() {
     });
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 md:py-8 lg:px-8">
+    <div className="mx-auto flex w-full max-w-[90rem] 2xl:max-w-[104rem] flex-1 flex-col gap-6 px-4 py-6 sm:px-6 md:py-8 lg:px-8">
       <div className="flex flex-col gap-1">
         <h1 className="font-display text-2xl font-extrabold tracking-tight md:text-3xl">Favorilerim</h1>
         <p className="text-sm text-muted">Favorilere eklediğin etkinlikler burada listelenir.</p>
