@@ -2,7 +2,7 @@
  * Tests for `slugify`, which generates `categories.slug` values.
  *
  * Worth pinning because the slug is not cosmetic: the public listing filters
- * by `?kategori=<slug>` (see components/FilterBar.tsx), so a slug that comes
+ * by `?kategori=<slug>` (see components/ListingFilters.tsx), so a slug that comes
  * out with a non-ASCII character in it produces a category whose filter link
  * silently matches nothing.
  */

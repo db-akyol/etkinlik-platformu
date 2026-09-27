@@ -6,10 +6,42 @@ ettirebilsin diye. Projenin orijinal planı için
 [`docs/plan.md`](./plan.md); scraper'ların ayrıntısı için
 [`scripts/scrapers/README.md`](../scripts/scrapers/README.md).
 
-**Son güncelleme:** 2026-09-16 — bubilet.com.tr 4. kaynak olarak eklendi,
-sonra production'da görülen iki gerçek sorun düzeltildi: çapraz-kaynak
-duplike etkinlikler (bkz. "Dedup ve moderasyon") ve yanlış şehirden bir
-etkinlik (bkz. "bubilet.com.tr artık scrape ediliyor" notu aşağıda).
+**Son güncelleme:** 2026-09-27 — public site "Uygulama gibi" tasarımına
+geçirildi (bkz. "Yeni tasarım" aşağıda). Değişiklikler henüz commit
+edilmedi, `tasarim/uygulama-gibi` dalında duruyor ve proje sahibinin
+onayını bekliyor.
+
+## Yeni tasarım (2026-09-27, `tasarim/uygulama-gibi` dalı, commit edilmedi)
+
+Proje sahibi üç yönün görsel taslağından "Uygulama gibi"yi, mevcut Dicle
+paletiyle seçti. Yeni oturum buraya dönüyorsa önce `git status` ve
+`git diff`'e bakın. Dal değişikliği klasörün tamamı için geçerli: bu dalda
+commit edilen her şey `main`'e değil bu dala gider.
+
+- **Düzen:** masaüstünde solda sabit panel (`components/CalendarPanel.tsx`
+  takvim + `components/ListingFilters.tsx` kategori/fiyat), sağda günlere
+  ayrılmış liste. Telefonda gün şeridi, kategori çipleri ve alt menü
+  (`components/AppNav.tsx`). Arama başlıkta (`components/HeaderSearch.tsx`).
+  Yeni `/hesap` sayfası.
+- **URL parametreleri:** `q`, `kategori`, `gun` (YYYY-MM-DD), `fiyat`
+  (`ucretsiz` | `300`), `gorunum=harita`. Eski `?tarih=` (Bugün/Bu hafta/Bu
+  ay) kaldırıldı, yerini takvim aldı.
+- **Seans gruplama:** aynı başlık + aynı mekân = tek kart ("2 seans").
+  Sadece gösterim; veritabanı satırları ayrı kalıyor. `lib/event-groups.ts`.
+  Detay sayfası diğer seansları listeliyor. Scraper'ın dedup'ıyla karıştırmayın.
+- **Görsel:** fontlar Figtree (gövde) + Bricolage Grotesque (başlıklar),
+  ikisi de `latin-ext` ile. Nötr renkler Dicle'ye doğru hafif kaydırıldı,
+  yeni `--muted`, `--color-dicle-soft`, `--color-free` token'ları var.
+  Kartlar dikey poster (4:5) ve köşede takvim yaprağı tarih damgası taşıyor.
+  Logo: plaka kodu "21" yazan takvim yaprağı.
+- **Görünüm başlıkları:** "Hep Yek - İSTANBUL DT - 22.DOA" → "Hep Yek" +
+  "İstanbul Devlet Tiyatrosu" (`splitEventTitle`, sadece gösterim).
+- **Bilinen:** bubilet posterleri tarayıcıda yüklenmiyor
+  (`ERR_BLOCKED_BY_RESPONSE.NotSameOrigin`, bubilet'in CORP başlığı).
+  Tasarımdan önce de vardı, henüz çözülmedi.
+- **Neden taslak önce:** 2026-09-16'daki "Kara Amid" tasarımı plan
+  onayından sonra kodlanıp tamamen reddedilmişti. Bu sefer önce görsel
+  taslak gösterildi, seçilen yön öyle uygulandı.
 
 ---
 
@@ -48,13 +80,10 @@ manuel giriş sadece ulaşılamayan etkinlikler için yedektir.
 - **Test + CI** — `npm test` (ağ/DB gerektirmez) ve her push'ta
   typecheck + lint + test + build çalıştıran `.github/workflows/ci.yml`.
 
-**Görsel kimlik not:** public site'ta indigo aksan rengi "Dicle" tonuna
-(`--color-dicle`, `app/globals.css`) geçti, başlıklar Space Grotesk
-fontuyla yazılıyor (`--font-display`). Kart grid'i, thumbnail'lar ve genel
-yerleşim **bilerek dokunulmadan** bırakıldı. Kural net: tasarım
-değişiklikleri her zaman mevcut yapının üzerine ekleme olmalı, yeniden
-tasarım değil (daha önce tam kapsamlı bir "Kara Amid" yeniden tasarımı
-denenip geri alınmıştı).
+**Görsel kimlik not:** aksan rengi "Dicle" (`--color-dicle`,
+`app/globals.css`). Tasarım kararlarında kural: büyük bir değişiklik
+kodlanmadan önce proje sahibine görsel taslak gösterilir (bkz. "Yeni
+tasarım" yukarıda).
 
 ## Mimari notlar
 

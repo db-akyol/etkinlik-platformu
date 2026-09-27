@@ -24,25 +24,33 @@
 :root {
   color-scheme: light;
 
-  /* A hair off pure white so a white card reads as a raised surface rather
-   * than dissolving into the page. */
-  --background: #fafafa;
-  --foreground: #171717;
+  /* Neutrals lean slightly toward the Dicle teal rather than pure gray, so
+   * the page and the accent read as one palette. The ground is a hair off
+   * white so a white card or panel reads as a raised surface. */
+  --background: #f5f7f7;
+  --foreground: #122120;
+  /* Secondary text: venue names, counts, captions. 5.6:1 on --background. */
+  --muted: #566768;
 
   --surface: #ffffff;
-  --surface-muted: #f4f4f5;
+  --surface-muted: #e7eeee;
 
-  --line: rgba(0, 0, 0, 0.08);
-  --line-strong: rgba(0, 0, 0, 0.14);
+  --line: rgba(18, 33, 32, 0.11);
+  --line-strong: rgba(18, 33, 32, 0.18);
 
   --color-dicle: #0f6e78;
   --color-dicle-dim: #0c5960;
   --color-on-dicle: #ffffff;
+  /* Selected-row fill in the filter panel: a tint, not the full accent. */
+  --color-dicle-soft: #d9ebeb;
+  /* "Ücretsiz" prices. */
+  --color-free: #0b7a52;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
   --color-surface: var(--surface);
   --color-surface-muted: var(--surface-muted);
   --color-line: var(--line);
@@ -50,8 +58,10 @@
   --color-dicle: var(--color-dicle);
   --color-dicle-dim: var(--color-dicle-dim);
   --color-on-dicle: var(--color-on-dicle);
-  --font-sans: var(--font-geist-sans);
-  --font-display: var(--font-space-grotesk);
+  --color-dicle-soft: var(--color-dicle-soft);
+  --color-free: var(--color-free);
+  --font-sans: var(--font-figtree);
+  --font-display: var(--font-bricolage);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -62,38 +72,47 @@
      * chrome onto dark surfaces. */
     color-scheme: dark;
 
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #0b1313;
+    --foreground: #e4eeed;
+    --muted: #9aafae;
 
-    --surface: #18181b;
-    --surface-muted: #27272a;
+    --surface: #131e1e;
+    --surface-muted: #1b2a2a;
 
-    --line: rgba(255, 255, 255, 0.10);
-    --line-strong: rgba(255, 255, 255, 0.18);
+    --line: rgba(228, 238, 237, 0.11);
+    --line-strong: rgba(228, 238, 237, 0.18);
 
     --color-dicle: #2dd4bf;
     /* Hover LIFTS in dark mode — the fill is already bright, so the dim
      * token goes lighter here where it goes darker in light mode. */
     --color-dicle-dim: #5eead4;
     --color-on-dicle: #062a28;
+    --color-dicle-soft: #12383a;
+    --color-free: #6ee7b7;
   }
 }
 
 html {
-  /* Both sticky bars (header at top-0, filter bar at top-14) would otherwise
-   * cover an element the browser just scrolled a keyboard focus or an #anchor
-   * to. Reserve their combined height. */
-  scroll-padding-top: 9rem;
+  /* The sticky header would otherwise cover an element the browser just
+   * scrolled a keyboard focus or an #anchor to. On phones it is two rows
+   * (brand, then search). */
+  scroll-padding-top: 8rem;
+}
+
+@media (min-width: 768px) {
+  html {
+    scroll-padding-top: 5rem;
+  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  /* Geist is loaded and preloaded by app/layout.tsx. This used to read
+  /* Figtree is loaded and preloaded by app/layout.tsx. This used to read
    * `Arial, Helvetica, sans-serif`, which meant the font was downloaded on
    * every visit and then painted zero glyphs — the whole site rendered in
    * Arial. */
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+  font-family: var(--font-figtree), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", Roboto, Arial, sans-serif;
 }
 
@@ -103,9 +122,14 @@ body {
  * does. Anything that sets `outline-none` opts out of this and has to
  * provide its own ring — prefer not to.
  */
-:focus-visible {
-  outline: 2px solid var(--color-dicle);
-  outline-offset: 2px;
+@layer base {
+  /* In the base layer so a utility like `outline-none` really can opt out:
+   * unlayered CSS beats every Tailwind layer, which silently kept this ring
+   * on top of components that draw their own. */
+  :focus-visible {
+    outline: 2px solid var(--color-dicle);
+    outline-offset: 2px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

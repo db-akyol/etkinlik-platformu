@@ -1,12 +1,29 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import Link from "next/link";
+import CalendarPanel from "@/components/CalendarPanel";
 import EventCard, { type EventWithRelations } from "@/components/EventCard";
-import { formatEventDateTime } from "@/lib/format-event";
+import { EVENT_GRID_CLASS } from "@/components/EventCardSkeleton";
 import EventMap, { type MapMarker } from "@/components/EventMap";
-import FilterBar from "@/components/FilterBar";
+import { ListIcon, MapPinIcon } from "@/components/icons";
+import {
+  DateStrip,
+  FilterChips,
+  PRICE_FILTERS,
+  SideFilters,
+  type CategoryOption,
+} from "@/components/ListingFilters";
+import { groupSessions, type SessionGroup } from "@/lib/event-groups";
+import {
+  buildListingHref,
+  calendarStartMonth,
+  getUpcomingFloor,
+  matchesPriceFilter,
+  parseDayParam,
+  type ListingParams,
+} from "@/lib/event-filters";
+import { formatDayHeading, formatDayLong, formatEventDateTime, istanbulDayKey } from "@/lib/format-event";
+import { istanbulTodayDateString } from "@/lib/istanbul-time";
 import { createClient } from "@/lib/supabase/server";
-import { getDateRange } from "@/lib/event-filters";
 import type { Category, City } from "@/lib/supabase/types";
 
 // Event content here comes from the scraper cron (writes directly to
@@ -18,9 +35,10 @@ import type { Category, City } from "@/lib/supabase/types";
 // hit Supabase for real, current data.
 export const dynamic = "force-dynamic";
 
-// Every filtered view (?kategori=, ?tarih=, ?q=, ?gorunum=) is the same set of
-// events in a different order or subset, so they all point back to the bare
-// listing instead of competing with it for the same search results.
+// Every filtered view (?kategori=, ?gun=, ?q=, ?fiyat=, ?gorunum=) is the
+// same set of events in a different order or subset, so they all point back
+// to the bare listing instead of competing with it for the same search
+// results.
 //
 // Only `alternates` is set: Next merges metadata shallowly, so re-declaring
 // `openGraph` here just to add a `url` would discard the image, title and
@@ -33,25 +51,30 @@ export const metadata: Metadata = {
 const EVENT_SELECT =
   "*, venue:venues(id, name, address, lat, lng), category:categories(id, name, slug)" as const;
 
-const DATE_FILTER_LABELS: Record<string, string> = {
-  bugun: "Bugün",
-  hafta: "Bu Hafta",
-  ay: "Bu Ay",
-};
-
 type SearchParams = { [key: string]: string | string[] | undefined };
+
+/** One card: a show, opened at the session that fits the current filters. */
+type ListingItem = { group: SessionGroup<EventWithRelations>; session: EventWithRelations };
+
+const stringParam = (value: string | string[] | undefined) =>
+  typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 
 export default async function Home({
   searchParams,
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const params = await searchParams;
-  const kategori = typeof params.kategori === "string" ? params.kategori : undefined;
-  const tarih = typeof params.tarih === "string" ? params.tarih : undefined;
-  const q = typeof params.q === "string" ? params.q.trim() : undefined;
-  const gorunum = params.gorunum === "harita" ? "harita" : "liste";
-  const hasFilters = Boolean(kategori || tarih || q);
+  const raw = await searchParams;
+  const params: ListingParams = {
+    q: stringParam(raw.q),
+    kategori: stringParam(raw.kategori),
+    gun: parseDayParam(stringParam(raw.gun)),
+    fiyat: PRICE_FILTERS.some((f) => f.value && f.value === raw.fiyat) ? (raw.fiyat as string) : undefined,
+    gorunum: raw.gorunum === "harita" ? "harita" : undefined,
+  };
+  const { q, kategori, gun, fiyat } = params;
+  const hasFilters = Boolean(q || kategori || gun || fiyat);
+  const todayKey = istanbulTodayDateString();
 
   const supabase = await createClient();
 
@@ -93,39 +116,67 @@ export default async function Home({
   let eventsError: { message: string } | null = null;
 
   if (activeCity) {
-    const { gte, lt } = getDateRange(tarih);
-
-    let query = supabase
+    // Every upcoming event, filtered below in memory: the calendar needs to
+    // know which days have events even while one day is selected, and the
+    // whole city is a few hundred rows at most.
+    const { data, error } = await supabase
       .from("events")
       .select<typeof EVENT_SELECT, EventWithRelations>(EVENT_SELECT)
       .eq("status", "approved")
       .eq("city_id", activeCity.id)
+      .gte("start_at", getUpcomingFloor(todayKey))
       .order("start_at", { ascending: true });
-
-    query = query.gte("start_at", gte);
-    if (lt) query = query.lt("start_at", lt);
-
-    const { data, error } = await query;
 
     if (error) {
       console.error("[public/page] events query failed:", error);
       eventsError = error;
     } else {
       events = data ?? [];
-
-      if (kategori) {
-        events = events.filter((event) => event.category?.slug === kategori);
-      }
-
-      if (q) {
-        const needle = q.toLocaleLowerCase("tr-TR");
-        events = events.filter((event) =>
-          [event.title, event.description, event.venue?.name]
-            .filter(Boolean)
-            .some((field) => field!.toLocaleLowerCase("tr-TR").includes(needle)),
-        );
-      }
     }
+  }
+
+  // Search and price are properties of a single session, so they filter
+  // before grouping. Category and day are then applied per show, each
+  // leaving the other out where the UI needs it: the calendar marks days
+  // within the selected category, and category counts are for the selected
+  // day.
+  const needle = q?.toLocaleLowerCase("tr-TR");
+  const groups = groupSessions(
+    events.filter(
+      (event) =>
+        matchesPriceFilter(event.price, fiyat) &&
+        (!needle ||
+          [event.title, event.description, event.venue?.name].some((field) =>
+            field?.toLocaleLowerCase("tr-TR").includes(needle),
+          )),
+    ),
+  );
+  const inCategory = (group: SessionGroup<EventWithRelations>) =>
+    !kategori || group.sessions[0].category?.slug === kategori;
+  const sessionOnDay = (group: SessionGroup<EventWithRelations>) =>
+    gun ? group.sessions.find((session) => istanbulDayKey(session.start_at) === gun) : group.sessions[0];
+
+  const eventDays = [
+    ...new Set(
+      groups.filter(inCategory).flatMap((group) => group.sessions.map((s) => istanbulDayKey(s.start_at))),
+    ),
+  ].sort();
+
+  const groupsOnDay = groups.filter((group) => sessionOnDay(group));
+  const categoryOptions: CategoryOption[] = (categories ?? []).map((category) => ({
+    ...category,
+    count: groupsOnDay.filter((group) => group.sessions[0].category?.slug === category.slug).length,
+  }));
+
+  const items: ListingItem[] = groupsOnDay
+    .filter(inCategory)
+    .map((group) => ({ group, session: sessionOnDay(group)! }))
+    .sort((a, b) => a.session.start_at.localeCompare(b.session.start_at));
+
+  const days = new Map<string, ListingItem[]>();
+  for (const item of items) {
+    const key = istanbulDayKey(item.session.start_at);
+    days.set(key, [...(days.get(key) ?? []), item]);
   }
 
   // Categories/favorites failures degrade gracefully (an empty filter list,
@@ -134,135 +185,169 @@ export default async function Home({
   // rendering "no events found" over a transient PostgREST failure is
   // exactly the bug this branch exists to avoid.
   const hasError = Boolean(activeCityError) || Boolean(eventsError);
-  const hasResults = events.length > 0;
+  const isMap = params.gorunum === "harita";
 
-  const markers: MapMarker[] = events
-    .filter((event) => event.venue?.lat != null && event.venue?.lng != null)
-    .map((event) => ({
-      id: event.id,
-      lat: event.venue!.lat!,
-      lng: event.venue!.lng!,
-      title: event.title,
-      subtitle: `${formatEventDateTime(event.start_at)} · ${event.venue!.name}`,
-      href: `/etkinlik/${event.id}`,
+  const markers: MapMarker[] = items
+    .filter(({ session }) => session.venue?.lat != null && session.venue?.lng != null)
+    .map(({ session }) => ({
+      id: session.id,
+      lat: session.venue!.lat!,
+      lng: session.venue!.lng!,
+      title: session.title,
+      subtitle: `${formatEventDateTime(session.start_at)} · ${session.venue!.name}`,
+      href: `/etkinlik/${session.id}`,
     }));
 
-  // Drops only `gorunum`, keeping kategori/tarih/q — built server-side so the
-  // map's "back to list" link never has to guess the current filter state.
-  const listViewParams = new URLSearchParams();
-  if (kategori) listViewParams.set("kategori", kategori);
-  if (tarih) listViewParams.set("tarih", tarih);
-  if (q) listViewParams.set("q", q);
-  const listViewQuery = listViewParams.toString();
-  const listViewHref = listViewQuery ? `/?${listViewQuery}` : "/";
-
-  const categoryLabel = kategori
-    ? ((categories ?? []).find((category) => category.slug === kategori)?.name ?? kategori)
-    : undefined;
-  const dateLabel = tarih ? (DATE_FILTER_LABELS[tarih] ?? tarih) : undefined;
-  const activeFilterLabels = [
-    q ? `“${q}”` : null,
-    categoryLabel ?? null,
-    dateLabel ?? null,
-  ].filter((label): label is string => label != null);
+  const clearHref = buildListingHref({ gorunum: params.gorunum });
+  let cardIndex = 0;
+  const renderCard = ({ group, session }: ListingItem) => (
+    <EventCard
+      key={session.id}
+      event={session}
+      sessionCount={group.sessions.length}
+      dateShownAbove
+      isLoggedIn={!!user}
+      isFavorited={favoriteEventIds.has(session.id)}
+      // The first row is the page's LCP element, so it loads eagerly while
+      // everything below stays lazy.
+      priority={cardIndex++ < 4}
+    />
+  );
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-      <div className="flex flex-col gap-1">
-        {/* Deliberately NOT a flex row: flex items don't wrap, so at 375px
-          * the title overflowed the viewport by 12px instead of breaking
-          * onto a second line. An inline-block dot keeps the same look and
-          * lets the heading wrap the way text is supposed to. */}
-        <h1 className="font-display text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-          <span
-            className="mr-2.5 inline-block h-2.5 w-2.5 rounded-full bg-dicle align-middle"
-            aria-hidden="true"
-          />
-          Diyarbakır <span className="text-dicle">Etkinlikleri</span>
-        </h1>
-        {hasResults ? (
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            <span className="font-display text-base font-semibold text-foreground">
-              {events.length}
-            </span>{" "}
-            etkinlik listeleniyor.
-          </p>
-        ) : (
-          !hasFilters &&
-          !hasError && (
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              Şehirdeki güncel konser, tiyatro, atölye ve daha fazla etkinliği keşfedin.
-            </p>
-          )
-        )}
-      </div>
-
-      <div className="sticky top-14 z-20 -mx-4 border-b border-line bg-background px-4 py-3 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-        <Suspense fallback={<div className="h-10" />}>
-          <FilterBar categories={categories ?? []} />
-        </Suspense>
-      </div>
-
-      {hasError ? (
-        <div
-          role="alert"
-          className="rounded-lg border border-red-300 bg-red-50 p-6 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
+    <div className="mx-auto w-full max-w-7xl flex-1 px-4 sm:px-6 lg:px-8">
+      <div className="md:grid md:grid-cols-[16.5rem_minmax(0,1fr)] md:gap-10 md:py-8 lg:gap-12">
+        <aside
+          aria-label="Filtreler"
+          className="hidden md:sticky md:top-24 md:flex md:max-h-[calc(100vh-7rem)] md:flex-col md:gap-7 md:self-start md:overflow-y-auto"
         >
-          <p className="font-medium">Etkinlikler şu anda yüklenemiyor.</p>
-          <p>Lütfen birazdan tekrar deneyin.</p>
-        </div>
-      ) : !hasResults ? (
-        hasFilters ? (
-          <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-            <p className="font-medium text-zinc-700 dark:text-zinc-300">Sonuç bulunamadı</p>
-            {activeFilterLabels.length > 0 && (
-              <p>Aradığınız kriterlere uygun etkinlik yok: {activeFilterLabels.join(", ")}.</p>
-            )}
-            <Link
-              href="/"
-              className="rounded-full bg-dicle px-4 py-1.5 text-sm font-medium text-on-dicle transition-colors hover:bg-dicle-dim"
+          <CalendarPanel
+            key={calendarStartMonth(eventDays, todayKey, gun)}
+            eventDays={eventDays}
+            todayKey={todayKey}
+            params={params}
+          />
+          <SideFilters categories={categoryOptions} totalCount={groupsOnDay.length} params={params} />
+        </aside>
+
+        <div className="min-w-0 pb-10">
+          <DateStrip todayKey={todayKey} eventDays={eventDays} params={params} />
+          <FilterChips categories={categoryOptions} totalCount={groupsOnDay.length} params={params} />
+
+          <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 pt-2 md:pt-0">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h1 className="font-display text-2xl font-extrabold tracking-tight text-balance md:text-3xl">
+                {gun ? formatDayLong(gun) : "Yaklaşan etkinlikler"}
+              </h1>
+              {!hasError && (
+                <p className="text-sm text-muted tabular-nums">{items.length} etkinlik</p>
+              )}
+              {hasFilters && (
+                <Link
+                  href={clearHref}
+                  scroll={false}
+                  className="rounded-full bg-surface-muted px-3 py-1 text-[13px] font-semibold transition-colors hover:bg-line-strong"
+                >
+                  Filtreleri temizle
+                </Link>
+              )}
+            </div>
+            {/* Desktop only: on phones the tab bar's Keşfet/Harita do this. */}
+            <nav
+              aria-label="Görünüm"
+              className="ml-auto hidden shrink-0 rounded-full border border-line bg-surface p-0.5 text-sm font-semibold md:flex"
             >
-              Filtreleri temizle
-            </Link>
+              <Link
+                href={buildListingHref(params, { gorunum: undefined })}
+                scroll={false}
+                aria-current={!isMap ? "page" : undefined}
+                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-muted aria-[current=page]:bg-dicle aria-[current=page]:text-on-dicle"
+              >
+                <ListIcon size={16} />
+                Liste
+              </Link>
+              <Link
+                href={buildListingHref(params, { gorunum: "harita" })}
+                scroll={false}
+                aria-current={isMap ? "page" : undefined}
+                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-muted aria-[current=page]:bg-dicle aria-[current=page]:text-on-dicle"
+              >
+                <MapPinIcon size={16} />
+                Harita
+              </Link>
+            </nav>
           </div>
-        ) : activeCity ? (
-          <p className="rounded-lg border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-            Şu anda yayında olan etkinlik yok. Yeni etkinlikler eklendikçe burada görünecek.
-          </p>
-        ) : (
-          <p className="rounded-lg border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-            Etkinlikler şu anda hazırlanıyor.
-          </p>
-        )
-      ) : gorunum === "harita" ? (
-        markers.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-            <p>Bu etkinliklerin hiçbirinin konum bilgisi yok.</p>
-            <Link
-              href={listViewHref}
-              className="rounded-full bg-dicle px-4 py-1.5 text-sm font-medium text-on-dicle transition-colors hover:bg-dicle-dim"
+
+          {hasError ? (
+            <div
+              role="alert"
+              className="rounded-2xl border border-red-300 bg-red-50 p-6 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
             >
-              Liste görünümüne dön
-            </Link>
-          </div>
-        ) : (
-          <EventMap markers={markers} className="h-[32rem] w-full rounded-xl" />
-        )
-      ) : (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {events.map((event, index) => (
-            <EventCard
-              key={event.id}
-              event={event}
-              isLoggedIn={!!user}
-              isFavorited={favoriteEventIds.has(event.id)}
-              // The first row is the page's LCP element, so it loads eagerly
-              // while everything below stays lazy. 3 matches lg:grid-cols-3.
-              priority={index < 3}
-            />
-          ))}
+              <p className="font-semibold">Etkinlikler şu anda yüklenemiyor.</p>
+              <p>Lütfen birazdan tekrar deneyin.</p>
+            </div>
+          ) : items.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-line-strong px-6 py-12 text-center text-sm text-muted">
+              {hasFilters ? (
+                <>
+                  <p className="font-semibold text-foreground">Bu seçime uyan etkinlik yok.</p>
+                  <p>Başka bir gün ya da kategori seçin veya filtreleri temizleyin.</p>
+                  <Link
+                    href={clearHref}
+                    className="mt-1 rounded-full bg-dicle px-4 py-2 font-semibold text-on-dicle transition-colors hover:bg-dicle-dim"
+                  >
+                    Filtreleri temizle
+                  </Link>
+                </>
+              ) : activeCity ? (
+                <p>Şu anda yayında olan etkinlik yok. Yeni etkinlikler eklendikçe burada görünecek.</p>
+              ) : (
+                <p>Etkinlikler şu anda hazırlanıyor.</p>
+              )}
+            </div>
+          ) : isMap ? (
+            markers.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-line-strong px-6 py-12 text-center text-sm text-muted">
+                <p>Bu etkinliklerin hiçbirinin konum bilgisi yok.</p>
+                <Link
+                  href={buildListingHref(params, { gorunum: undefined })}
+                  className="rounded-full bg-dicle px-4 py-2 font-semibold text-on-dicle transition-colors hover:bg-dicle-dim"
+                >
+                  Liste görünümüne dön
+                </Link>
+              </div>
+            ) : (
+              <EventMap markers={markers} className="h-[32rem] w-full rounded-2xl md:h-[calc(100vh-12rem)]" />
+            )
+          ) : gun ? (
+            // One day selected: the page heading already names it.
+            <div className={EVENT_GRID_CLASS}>{items.map(renderCard)}</div>
+          ) : (
+            <div className="flex flex-col gap-10">
+              {[...days.entries()].map(([dayKey, dayItems]) => {
+                const heading = formatDayHeading(dayKey, todayKey);
+                return (
+                  <section key={dayKey} aria-labelledby={`gun-${dayKey}`} className="flex flex-col gap-4">
+                    <h2
+                      id={`gun-${dayKey}`}
+                      className="flex items-baseline gap-2.5 border-b border-line pb-2.5"
+                    >
+                      <span className="font-display text-xl font-extrabold tracking-tight">
+                        {heading.title}
+                      </span>
+                      <span className="text-sm text-muted">{heading.detail}</span>
+                      <span className="ml-auto text-[13px] text-muted tabular-nums">
+                        {dayItems.length} etkinlik
+                      </span>
+                    </h2>
+                    <div className={EVENT_GRID_CLASS}>{dayItems.map(renderCard)}</div>
+                  </section>
+                );
+              })}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

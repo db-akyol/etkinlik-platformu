@@ -1,24 +1,26 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
+import { Bricolage_Grotesque, Figtree, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { getSiteUrl } from "@/lib/site-url";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+// `latin-ext` is not optional on either face: it carries ğ, ş, ı and İ.
+// With `latin` alone every Turkish word falls back to the system font
+// mid-word.
+const figtree = Figtree({
+  variable: "--font-figtree",
+  subsets: ["latin", "latin-ext"],
+});
+
+// Headings, event titles and the date numerals only.
+const bricolage = Bricolage_Grotesque({
+  variable: "--font-bricolage",
+  subsets: ["latin", "latin-ext"],
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-// Heading font only — body text stays on Geist. Gives titles some
-// character without touching the reading experience.
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-space-grotesk",
   subsets: ["latin"],
 });
 
@@ -58,20 +60,24 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  // Matches the site header's `bg-background/95 backdrop-blur` (app/(public)/layout.tsx),
-  // which reads as the page background color, not the accent — so mobile
-  // browser chrome sits flush with the header instead of clashing with it.
+  // Matches --background in globals.css, which the site header is painted
+  // with — so mobile browser chrome sits flush with the header instead of
+  // clashing with it.
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+    { media: "(prefers-color-scheme: light)", color: "#f5f7f7" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b1313" },
   ],
+  // Lets the installed PWA draw under the notch and home indicator. The
+  // header and the bottom tab bar pad themselves by env(safe-area-inset-*)
+  // to keep their contents clear of both.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="tr"
-      className={`${geistSans.variable} ${geistMono.variable} ${spaceGrotesk.variable} h-full antialiased`}
+      className={`${figtree.variable} ${bricolage.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <ServiceWorkerRegister />

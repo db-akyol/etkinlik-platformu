@@ -4,8 +4,18 @@ import { notFound } from "next/navigation";
 import { type EventWithRelations } from "@/components/EventCard";
 import EventMap from "@/components/EventMap";
 import FavoriteButton from "@/components/FavoriteButton";
-import { formatEventDateTime, formatEventPrice } from "@/lib/format-event";
+import { ChevronLeftIcon, ExternalIcon } from "@/components/icons";
+import { getUpcomingFloor } from "@/lib/event-filters";
+import {
+  formatDayLong,
+  formatEventDateTime,
+  formatEventPrice,
+  formatEventTime,
+  istanbulDayKey,
+  splitEventTitle,
+} from "@/lib/format-event";
 import { createClient } from "@/lib/supabase/server";
+import type { EventRow } from "@/lib/supabase/types";
 
 // Event content here comes from the scraper cron (writes directly to
 // Supabase, bypassing Next.js entirely — there's no request that could ever
@@ -48,7 +58,8 @@ export async function generateMetadata({
   const { event, error } = await getApprovedEvent(id);
 
   if (!event || error) {
-    return { title: "Etkinlik bulunamadı | Diyarbakır Etkinlik" };
+    // The root layout's title template adds " | Diyarbakır Etkinlik".
+    return { title: "Etkinlik bulunamadı" };
   }
 
   const description =
@@ -64,7 +75,7 @@ export async function generateMetadata({
   const images = event.image_url ? [event.image_url] : ["/og-default.png"];
 
   return {
-    title: `${event.title} | Diyarbakır Etkinlik`,
+    title: event.title,
     description,
     alternates: { canonical: path },
     openGraph: {
@@ -110,9 +121,35 @@ export default async function EventDetailPage({
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+
+  // The other sessions of this show, as grouped on the listing (see
+  // lib/event-groups.ts). Exact title match is enough here: a source repeats
+  // a show's title verbatim for each of its sessions.
+  let otherSessionsQuery = supabase
+    .from("events")
+    .select("id, start_at, price")
+    .eq("status", "approved")
+    .eq("title", event.title)
+    .neq("id", event.id)
+    .gte("start_at", getUpcomingFloor())
+    .order("start_at", { ascending: true });
+  otherSessionsQuery = event.venue_id
+    ? otherSessionsQuery.eq("venue_id", event.venue_id)
+    : otherSessionsQuery.is("venue_id", null);
+
+  const [
+    {
+      data: { user },
+    },
+    { data: otherSessionRows, error: otherSessionsError },
+  ] = await Promise.all([
+    supabase.auth.getUser(),
+    otherSessionsQuery.returns<Pick<EventRow, "id" | "start_at" | "price">[]>(),
+  ]);
+
+  // Nice-to-have: a failure here just hides the list.
+  if (otherSessionsError) console.error(`[etkinlik/${id}] other sessions lookup failed:`, otherSessionsError);
+  const otherSessions = otherSessionRows ?? [];
 
   let isFavorited = false;
   if (user) {
@@ -125,66 +162,144 @@ export default async function EventDetailPage({
     isFavorited = (favorite?.length ?? 0) > 0;
   }
 
+  const { title, subtitle } = splitEventTitle(event.title);
+  const dayKey = istanbulDayKey(event.start_at);
+  // Some sources send the start time again as the end time when they have
+  // no real one; an end that isn't after the start is treated as absent.
+  const endAt = event.end_at && event.end_at > event.start_at ? event.end_at : null;
+  const timeText = endAt
+    ? istanbulDayKey(endAt) === dayKey
+      ? `${formatEventTime(event.start_at)} – ${formatEventTime(endAt)}`
+      : `${formatEventTime(event.start_at)} – ${formatEventDateTime(endAt)}`
+    : formatEventTime(event.start_at);
+  // Sources without a real description often repeat the title there.
+  const description = event.description?.trim() !== event.title.trim() ? event.description : null;
+  const sourceHost = event.source_type === "scraped" ? hostnameOf(event.source_url) : null;
+
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-      <Link href="/" className="text-sm font-medium text-dicle hover:underline">
-        ← Tüm etkinlikler
+    <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-5 sm:px-6 md:py-8 lg:px-8">
+      <Link
+        href="/"
+        className="-ml-1 inline-flex items-center gap-1 text-sm font-semibold text-muted transition-colors hover:text-foreground"
+      >
+        <ChevronLeftIcon size={18} />
+        Tüm etkinlikler
       </Link>
 
-      <article className="overflow-hidden rounded-xl border border-line">
-        <div className="relative aspect-[16/9] w-full bg-zinc-200 dark:bg-zinc-800">
+      <article className="mt-5 grid gap-7 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] md:gap-12">
+        <div className="relative mx-auto aspect-[4/5] w-full max-w-sm overflow-hidden rounded-3xl bg-surface-muted md:sticky md:top-24 md:self-start">
           {event.image_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={event.image_url}
-              alt={event.title}
-              className="h-full w-full object-cover"
-            />
+            <>
+              {/* Same blurred-fill treatment as EventCard: the whole poster
+               * stays visible whatever its proportions. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={event.image_url}
+                alt=""
+                aria-hidden="true"
+                className="absolute inset-0 h-full w-full scale-125 object-cover blur-2xl"
+              />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={event.image_url}
+                alt={`${title} afişi`}
+                fetchPriority="high"
+                className="relative h-full w-full object-contain"
+              />
+            </>
           ) : (
-            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-dicle to-dicle-dim">
-              <span className="text-lg font-medium text-on-dicle">
+            <div className="flex h-full w-full items-center justify-center bg-linear-to-br from-dicle to-dicle-dim">
+              <span className="font-display text-2xl font-bold text-on-dicle">
                 {event.category?.name ?? "Etkinlik"}
               </span>
             </div>
           )}
         </div>
 
-        <div className="flex flex-col gap-4 p-6">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-col gap-6">
+          <div className="flex flex-col gap-3">
             {event.category && (
-              <span className="rounded-full bg-dicle/10 px-3 py-1 text-xs font-medium text-dicle">
+              <span className="self-start rounded-full bg-dicle-soft px-3 py-1 text-xs font-semibold text-foreground">
                 {event.category.name}
               </span>
             )}
-            <span className="rounded-full bg-surface-muted px-3 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-300">
-              {formatEventPrice(event.price)}
-            </span>
+            <h1 className="font-display text-4xl leading-[1.05] font-extrabold tracking-tight text-balance sm:text-5xl">
+              {title}
+            </h1>
+            {subtitle && <p className="text-lg text-muted">{subtitle}</p>}
+          </div>
+
+          <dl className="grid gap-x-6 gap-y-4 rounded-2xl border border-line bg-surface p-5 sm:grid-cols-2">
+            <div>
+              <dt className="text-[13px] font-semibold text-muted">Tarih</dt>
+              <dd className="mt-0.5 font-semibold">{formatDayLong(dayKey)}</dd>
+              <dd className="text-dicle font-semibold tabular-nums">{timeText}</dd>
+            </div>
+            <div>
+              <dt className="text-[13px] font-semibold text-muted">Fiyat</dt>
+              <dd className="mt-0.5 font-semibold tabular-nums">{formatEventPrice(event.price)}</dd>
+            </div>
+            {event.venue && (
+              <div className="sm:col-span-2">
+                <dt className="text-[13px] font-semibold text-muted">Mekan</dt>
+                <dd className="mt-0.5 font-semibold">{event.venue.name}</dd>
+                {event.venue.address && <dd className="text-sm text-muted">{event.venue.address}</dd>}
+              </div>
+            )}
+          </dl>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {sourceHost && (
+              <a
+                href={event.source_url!}
+                target="_blank"
+                rel="noopener noreferrer nofollow"
+                className="inline-flex items-center gap-2 rounded-full bg-dicle px-5 py-2.5 font-semibold text-on-dicle transition-colors hover:bg-dicle-dim"
+              >
+                Bilet ve ayrıntılar: {sourceHost}
+                <ExternalIcon size={16} />
+              </a>
+            )}
             <FavoriteButton
               eventId={event.id}
               initialFavorited={isFavorited}
               isLoggedIn={!!user}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-line text-zinc-700 transition-colors hover:bg-surface-muted dark:text-zinc-300"
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-line-strong bg-surface transition-colors hover:bg-surface-muted aria-busy:opacity-70"
             />
           </div>
 
-          {/* Bigger than the listing page's h1 on purpose — this is the more
-              important heading of the two, and used to render smaller. */}
-          <h1 className="font-display text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-            {event.title}
-          </h1>
+          {otherSessions.length > 0 && (
+            <section aria-labelledby="diger-seanslar" className="flex flex-col gap-2">
+              <h2 id="diger-seanslar" className="font-display text-lg font-bold">
+                Diğer seanslar
+              </h2>
+              <ul className="flex flex-col divide-y divide-line rounded-2xl border border-line bg-surface">
+                {otherSessions.map((session) => (
+                  <li key={session.id}>
+                    <Link
+                      href={`/etkinlik/${session.id}`}
+                      className="flex items-baseline justify-between gap-3 px-4 py-3 transition-colors hover:bg-surface-muted"
+                    >
+                      <span>
+                        {formatDayLong(istanbulDayKey(session.start_at))}
+                        <span className="ml-2 font-semibold text-dicle tabular-nums">
+                          {formatEventTime(session.start_at)}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-sm text-muted tabular-nums">
+                        {formatEventPrice(session.price)}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
-          <p className="text-base font-medium text-dicle">
-            {formatEventDateTime(event.start_at)}
-            {event.end_at ? ` – ${formatEventDateTime(event.end_at)}` : null}
-          </p>
-
-          {event.venue && (
-            <div className="text-sm text-zinc-700 dark:text-zinc-300">
-              <p className="font-medium">{event.venue.name}</p>
-              {event.venue.address && (
-                <p className="text-zinc-500 dark:text-zinc-400">{event.venue.address}</p>
-              )}
-            </div>
+          {description && (
+            // max-w-prose caps the line length at a comfortable reading
+            // measure (~65ch) regardless of how wide the column is.
+            <p className="max-w-prose text-base leading-relaxed whitespace-pre-line">{description}</p>
           )}
 
           {event.venue?.lat != null && event.venue?.lng != null && (
@@ -197,33 +312,21 @@ export default async function EventDetailPage({
                   title: event.venue.name,
                 },
               ]}
-              className="h-64 w-full rounded-lg"
+              className="h-64 w-full rounded-2xl"
             />
-          )}
-
-          {event.description && (
-            // max-w-prose caps the line length at a comfortable reading
-            // measure (~65ch) regardless of how wide the article column is.
-            <p className="max-w-prose whitespace-pre-line text-base leading-relaxed text-zinc-700 dark:text-zinc-300">
-              {event.description}
-            </p>
-          )}
-
-          {event.source_type === "scraped" && event.source_url && (
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Kaynak:{" "}
-              <a
-                href={event.source_url}
-                target="_blank"
-                rel="noopener noreferrer nofollow"
-                className="break-all underline hover:text-dicle"
-              >
-                {event.source_url}
-              </a>
-            </p>
           )}
         </div>
       </article>
     </div>
   );
+}
+
+/** "biletix.com" from a source URL; null when there is no usable URL. */
+function hostnameOf(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
 }

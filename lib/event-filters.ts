@@ -1,90 +1,125 @@
 /**
- * Query-building helpers for the public event listing.
+ * Filtering helpers for the public event listing.
  *
- * Split out of app/(public)/page.tsx so the date-window arithmetic — the
- * part with actual edge cases in it — can be unit-tested without rendering
- * a page (see lib/event-filters.test.ts).
+ * Split out of app/(public)/page.tsx so the date arithmetic and price
+ * parsing — the parts with actual edge cases in them — can be unit-tested
+ * without rendering a page (see lib/event-filters.test.ts).
  */
 import { istanbulLocalToUtcIso, istanbulTodayDateString } from "@/lib/istanbul-time";
 
-/** The `?tarih=` quick-filter values the UI offers (see components/FilterBar.tsx). */
-export type DateFilter = "bugun" | "hafta" | "ay";
+/** The URL search params the listing understands. */
+export type ListingParams = {
+  q?: string;
+  kategori?: string;
+  /** A single Istanbul calendar day, "YYYY-MM-DD". */
+  gun?: string;
+  /** "ucretsiz" or "300" (300 TL and under). */
+  fiyat?: string;
+  /** "harita" for the map view; absent for the list. */
+  gorunum?: string;
+};
+
+const PARAM_ORDER = ["q", "kategori", "gun", "fiyat", "gorunum"] as const;
+
+/**
+ * Builds a listing URL from the current params plus `changes`. A change of
+ * `undefined` or "" removes that param. Keys always come out in the same
+ * order, so the same filter state is always the same URL.
+ */
+export function buildListingHref(
+  params: ListingParams,
+  changes: Partial<Record<keyof ListingParams, string | undefined>> = {},
+): string {
+  const merged: ListingParams = { ...params, ...changes };
+  const search = new URLSearchParams();
+  for (const key of PARAM_ORDER) {
+    const value = merged[key];
+    if (value) search.set(key, value);
+  }
+  const query = search.toString();
+  return query ? `/?${query}` : "/";
+}
 
 /**
  * Adds `days` to a "YYYY-MM-DD" Istanbul calendar date, returning the same
  * shape.
  *
  * Done on a UTC-anchored Date rather than with `setDate()` on a local one:
- * `Date#setDate`/`setMonth` operate in the RUNTIME's timezone, so in any zone
- * that observes DST they can shift the resulting wall-clock time by an hour
- * and (at a boundary) roll the date over. Turkey itself has no DST and Vercel
- * runs in UTC, so that's dormant today — but it's the exact shape of the bug
- * that already cost this project three hours of wrong event times once, and
- * the UTC version costs nothing.
+ * `Date#setDate` operates in the RUNTIME's timezone, so in any zone that
+ * observes DST it can shift the result by an hour and (at a boundary) roll
+ * the date over. Turkey itself has no DST and Vercel runs in UTC, so that's
+ * dormant today — but it's the exact shape of the bug that already cost this
+ * project three hours of wrong event times once, and the UTC version costs
+ * nothing.
  */
-function addCalendarDays(dateString: string, days: number): string {
+export function addCalendarDays(dateString: string, days: number): string {
   const date = new Date(`${dateString}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
 }
 
 /**
- * Adds `months` to a "YYYY-MM-DD" Istanbul calendar date, clamping the day
- * to the target month's length rather than letting it overflow.
+ * The UTC instant the listing starts from: midnight at the start of today,
+ * Istanbul time.
  *
- * Plain `setUTCMonth(+1)` on the 31st of a month rolls forward into the NEXT
- * month (31 Ocak + 1 ay -> 3 Mart), which would quietly make the "Bu ay"
- * filter show a 33-day window a few times a year. Clamping gives 31 Ocak +
- * 1 ay -> 28/29 Şubat instead.
+ * A source can list events that have already happened (the municipality's
+ * listing does), and past events sorting to the top of an ascending-by-date
+ * list is never what a visitor wants.
+ *
+ * `today` is injectable purely so tests can pin a date.
  */
-function addCalendarMonths(dateString: string, months: number): string {
-  const date = new Date(`${dateString}T00:00:00Z`);
-  const day = date.getUTCDate();
-
-  // Move to the 1st first, so the month shift itself can never overflow.
-  date.setUTCDate(1);
-  date.setUTCMonth(date.getUTCMonth() + months);
-
-  // Day 0 of the following month == the last day of this one.
-  const daysInTargetMonth = new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0),
-  ).getUTCDate();
-  date.setUTCDate(Math.min(day, daysInTargetMonth));
-
-  return date.toISOString().slice(0, 10);
+export function getUpcomingFloor(today: string = istanbulTodayDateString()): string {
+  return istanbulLocalToUtcIso(`${today}T00:00`);
 }
 
 /**
- * Returns a `[gte, lt)` UTC ISO range for the event list.
- *
- * Always floors at "start of today" (Istanbul) regardless of the `tarih`
- * quick filter — a source can list events that have already happened (the
- * municipality's listing does; ticket vendors never have, since they only
- * sell upcoming shows, which is why this went unnoticed until a second
- * source surfaced it), and past events sorting to the top of an
- * ascending-by-date list is never what a visitor wants. `tarih` only ever
- * narrows the upper bound further; it never removes the floor.
- *
- * `today` is injectable purely so tests can pin a date; production always
- * uses the real Istanbul calendar date.
+ * The month ("YYYY-MM") the listing's calendar opens on: the selected day's,
+ * or the next event's — at the end of a month the rest of it is often empty.
+ * The page also uses it as CalendarPanel's `key`, so when a filter change
+ * moves it the calendar follows instead of staying where it first mounted.
  */
-export function getDateRange(
-  tarih?: string,
-  today: string = istanbulTodayDateString(),
-): { gte: string; lt?: string } {
-  const gte = istanbulLocalToUtcIso(`${today}T00:00`);
+export function calendarStartMonth(eventDays: string[], todayKey: string, selected?: string): string {
+  return (selected ?? eventDays.find((day) => day >= todayKey) ?? todayKey).slice(0, 7);
+}
 
-  let endDate: string;
-  if (tarih === "bugun") {
-    endDate = addCalendarDays(today, 1);
-  } else if (tarih === "hafta") {
-    endDate = addCalendarDays(today, 7);
-  } else if (tarih === "ay") {
-    endDate = addCalendarMonths(today, 1);
-  } else {
-    // Unrecognized or absent filter: no upper bound, just the floor.
-    return { gte };
+/** Returns `gun` if it is a real "YYYY-MM-DD" date, otherwise undefined. */
+export function parseDayParam(gun: string | undefined): string | undefined {
+  if (!gun || !/^\d{4}-\d{2}-\d{2}$/.test(gun)) return undefined;
+  // Round-tripping through Date rejects impossible dates like 2026-02-30,
+  // which would otherwise silently match nothing.
+  return new Date(`${gun}T00:00:00Z`).toISOString().slice(0, 10) === gun ? gun : undefined;
+}
+
+/**
+ * Whether a stored price means "free". Sources leave the field empty for
+ * free events (and, unavoidably, when they fail to publish a price — see
+ * `formatEventPrice`), and some write the word out.
+ */
+export function isFreePrice(price: string | null): boolean {
+  return !price || price.trim() === "" || /ücretsiz|bedava/i.test(price);
+}
+
+/**
+ * Reads the lowest TL amount out of a free-text price ("600 TL",
+ * "1.000 TL", "300 - 500 TL", "₺150,50"). Returns 0 for a free event and
+ * null when the text has no number in it at all.
+ *
+ * Turkish formatting uses "." for thousands and "," for decimals, so "1.000"
+ * is one thousand, not one. Kuruş are dropped: the only use is a coarse
+ * "under 300 TL" filter.
+ */
+export function parsePriceTL(price: string | null): number | null {
+  if (isFreePrice(price)) return 0;
+  const match = price!.match(/\d{1,3}(?:\.\d{3})+|\d+/);
+  return match ? Number.parseInt(match[0].replace(/\./g, ""), 10) : null;
+}
+
+/** Applies the `?fiyat=` filter. An unknown filter value keeps everything. */
+export function matchesPriceFilter(price: string | null, fiyat: string | undefined): boolean {
+  if (fiyat === "ucretsiz") return isFreePrice(price);
+  if (fiyat === "300") {
+    const amount = parsePriceTL(price);
+    return amount != null && amount <= 300;
   }
-
-  return { gte, lt: istanbulLocalToUtcIso(`${endDate}T00:00`) };
+  return true;
 }

@@ -7,7 +7,104 @@ process.env.TZ = "America/New_York";
 import assert from "node:assert/strict";
 import test, { describe } from "node:test";
 
-import { formatEventBadge, formatEventDateTime, formatEventPrice } from "./format-event";
+import {
+  formatDayChip,
+  formatDayHeading,
+  formatDayLong,
+  formatEventBadge,
+  formatEventDateTime,
+  formatEventPrice,
+  formatEventStamp,
+  formatEventTime,
+  formatMonthLabel,
+  istanbulDayKey,
+  shortVenueName,
+  splitEventTitle,
+} from "./format-event";
+
+describe("istanbulDayKey", () => {
+  test("uses the Istanbul calendar day, not UTC's", () => {
+    // 22:00 UTC on the 25th is 01:00 on the 26th in Istanbul.
+    assert.equal(istanbulDayKey("2026-09-25T22:00:00.000Z"), "2026-09-26");
+    assert.equal(istanbulDayKey("2026-09-25T20:59:00.000Z"), "2026-09-25");
+  });
+});
+
+describe("formatEventTime / formatEventStamp", () => {
+  test("show Istanbul wall-clock values", () => {
+    assert.equal(formatEventTime("2026-09-25T22:15:00.000Z"), "01:15");
+    assert.deepEqual(formatEventStamp("2026-09-25T22:15:00.000Z"), { day: "26", month: "Eyl" });
+  });
+});
+
+describe("formatDayHeading", () => {
+  test("names today and tomorrow, with the date as detail", () => {
+    assert.deepEqual(formatDayHeading("2026-09-25", "2026-09-25"), {
+      title: "Bugün",
+      detail: "Cuma, 25 Eylül",
+    });
+    assert.deepEqual(formatDayHeading("2026-09-26", "2026-09-25"), {
+      title: "Yarın",
+      detail: "Cumartesi, 26 Eylül",
+    });
+  });
+
+  test("uses the weekday as title further out", () => {
+    assert.deepEqual(formatDayHeading("2026-10-01", "2026-09-25"), {
+      title: "Perşembe",
+      detail: "1 Ekim",
+    });
+  });
+
+  test("counts days across a US DST change correctly", () => {
+    // Runtime is America/New_York, which falls back on 2026-11-01.
+    assert.equal(formatDayHeading("2026-11-01", "2026-10-31").title, "Yarın");
+  });
+});
+
+describe("day key labels", () => {
+  test("format the chip, month and long forms", () => {
+    assert.deepEqual(formatDayChip("2026-09-26"), { weekday: "Cmt", day: "26" });
+    assert.equal(formatMonthLabel("2026-10-01"), "Ekim 2026");
+    assert.equal(formatDayLong("2026-09-26"), "26 Eylül Cumartesi");
+  });
+});
+
+describe("splitEventTitle", () => {
+  test("splits the Devlet Tiyatroları festival suffix", () => {
+    assert.deepEqual(splitEventTitle("Hep Yek - İSTANBUL DT - 22.DOA"), {
+      title: "Hep Yek",
+      subtitle: "İstanbul Devlet Tiyatrosu",
+    });
+    assert.deepEqual(splitEventTitle("Nalınlar - DİYARBAKIR DT - 22.DOA"), {
+      title: "Nalınlar",
+      subtitle: "Diyarbakır Devlet Tiyatrosu",
+    });
+  });
+
+  test("keeps a dash inside the play's own name", () => {
+    assert.deepEqual(splitEventTitle("Düğün Ya Da Davul - KAYSERİ DT - 22.DOA").title, "Düğün Ya Da Davul");
+    assert.deepEqual(splitEventTitle("Gramofon - Hala Çalıyor - ANTALYA DT - 22.DOA").title, "Gramofon - Hala Çalıyor");
+  });
+
+  test("leaves every other title alone", () => {
+    assert.deepEqual(splitEventTitle("JAVADOFF - We Don't Say I Love You"), {
+      title: "JAVADOFF - We Don't Say I Love You",
+      subtitle: null,
+    });
+  });
+});
+
+describe("shortVenueName", () => {
+  test("drops a leading 'Diyarbakır '", () => {
+    assert.equal(
+      shortVenueName("Diyarbakır Sezai Karakoç Kültür ve Kongre Merkezi"),
+      "Sezai Karakoç Kültür ve Kongre Merkezi",
+    );
+    assert.equal(shortVenueName("Diyarbakır Surları"), "Diyarbakır Surları");
+    assert.equal(shortVenueName("Cegerxwîn Kültür Merkezi"), "Cegerxwîn Kültür Merkezi");
+  });
+});
 
 describe("formatEventDateTime", () => {
   test("renders a stored UTC instant as Turkey local time", () => {
