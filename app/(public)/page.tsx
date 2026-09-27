@@ -21,7 +21,7 @@ import {
   parseDayParam,
   type ListingParams,
 } from "@/lib/event-filters";
-import { formatDayHeading, formatDayLong, formatEventDateTime, istanbulDayKey } from "@/lib/format-event";
+import { formatDayLong, formatEventDateTime, istanbulDayKey, listingSection } from "@/lib/format-event";
 import { istanbulTodayDateString } from "@/lib/istanbul-time";
 import { createClient } from "@/lib/supabase/server";
 import type { Category, City } from "@/lib/supabase/types";
@@ -173,10 +173,13 @@ export default async function Home({
     .map((group) => ({ group, session: sessionOnDay(group)! }))
     .sort((a, b) => a.session.start_at.localeCompare(b.session.start_at));
 
-  const days = new Map<string, ListingItem[]>();
+  // Items are already in start order, so sections come out in order too.
+  const sections = new Map<string, { title: string; detail: string; items: ListingItem[] }>();
   for (const item of items) {
-    const key = istanbulDayKey(item.session.start_at);
-    days.set(key, [...(days.get(key) ?? []), item]);
+    const section = listingSection(istanbulDayKey(item.session.start_at), todayKey);
+    const existing = sections.get(section.key);
+    if (existing) existing.items.push(item);
+    else sections.set(section.key, { title: section.title, detail: section.detail, items: [item] });
   }
 
   // Categories/favorites failures degrade gracefully (an empty filter list,
@@ -200,12 +203,12 @@ export default async function Home({
 
   const clearHref = buildListingHref({ gorunum: params.gorunum });
   let cardIndex = 0;
-  const renderCard = ({ group, session }: ListingItem) => (
+  const renderCard = ({ group, session }: ListingItem, dateShownAbove: boolean) => (
     <EventCard
       key={session.id}
       event={session}
       sessionCount={group.sessions.length}
-      dateShownAbove
+      dateShownAbove={dateShownAbove}
       isLoggedIn={!!user}
       isFavorited={favoriteEventIds.has(session.id)}
       // The first row is the page's LCP element, so it loads eagerly while
@@ -321,29 +324,25 @@ export default async function Home({
             )
           ) : gun ? (
             // One day selected: the page heading already names it.
-            <div className={EVENT_GRID_CLASS}>{items.map(renderCard)}</div>
+            <div className={EVENT_GRID_CLASS}>{items.map((item) => renderCard(item, true))}</div>
           ) : (
             <div className="flex flex-col gap-10">
-              {[...days.entries()].map(([dayKey, dayItems]) => {
-                const heading = formatDayHeading(dayKey, todayKey);
-                return (
-                  <section key={dayKey} aria-labelledby={`gun-${dayKey}`} className="flex flex-col gap-4">
-                    <h2
-                      id={`gun-${dayKey}`}
-                      className="flex items-baseline gap-2.5 border-b border-line pb-2.5"
-                    >
-                      <span className="font-display text-xl font-extrabold tracking-tight">
-                        {heading.title}
-                      </span>
-                      <span className="text-sm text-muted">{heading.detail}</span>
-                      <span className="ml-auto text-[13px] text-muted tabular-nums">
-                        {dayItems.length} etkinlik
-                      </span>
-                    </h2>
-                    <div className={EVENT_GRID_CLASS}>{dayItems.map(renderCard)}</div>
-                  </section>
-                );
-              })}
+              {[...sections.entries()].map(([key, section]) => (
+                <section key={key} aria-labelledby={`bolum-${key}`} className="flex flex-col gap-4">
+                  <h2 id={`bolum-${key}`} className="flex items-baseline gap-2.5 border-b border-line pb-2.5">
+                    <span className="font-display text-xl font-extrabold tracking-tight">{section.title}</span>
+                    {section.detail && <span className="text-sm text-muted">{section.detail}</span>}
+                    <span className="ml-auto text-[13px] text-muted tabular-nums">
+                      {section.items.length} etkinlik
+                    </span>
+                  </h2>
+                  <div className={EVENT_GRID_CLASS}>
+                    {/* Today's and tomorrow's headings name the day; the
+                     * wider sections leave the date on each card. */}
+                    {section.items.map((item) => renderCard(item, key === "bugun" || key === "yarin"))}
+                  </div>
+                </section>
+              ))}
             </div>
           )}
         </div>

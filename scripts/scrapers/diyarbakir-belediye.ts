@@ -197,7 +197,7 @@ export function itemToEvents(item: BelediyeItem): ScrapedEventInput[] {
       ? normalizeText(item.summary!)
       : null;
   const category_name = mapCategory(item.event_category?.code);
-  const price = item.isFree ? null : item.price != null ? formatPriceTL(item.price) : null;
+  const price = item.isFree ? "Ücretsiz" : item.price != null ? formatPriceTL(item.price) : null;
   const venue_name = item.location ? normalizeText(item.location) : null;
   const source_url = `${BASE_URL}/etkinlikler/${item.slug}`;
   const image_url = resolveImageUrl(item.cover);

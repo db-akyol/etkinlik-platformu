@@ -8,6 +8,8 @@ import assert from "node:assert/strict";
 import test, { describe } from "node:test";
 
 import {
+  cardVenueLine,
+  listingSection,
   formatDayChip,
   formatDayHeading,
   formatDayLong,
@@ -197,13 +199,66 @@ describe("formatEventPrice", () => {
     assert.equal(formatEventPrice("896 TL"), "896 TL");
   });
 
-  test("shows 'Ücretsiz' when the source gave no price", () => {
-    // NOTE: this conflates "genuinely free" with "we failed to scrape a
-    // price", which is why the missing-price bug looked like every event
-    // being free. Kept deliberately — a free municipality event is the
-    // common case — but worth knowing when reading the site.
-    assert.equal(formatEventPrice(null), "Ücretsiz");
-    assert.equal(formatEventPrice(""), "Ücretsiz");
-    assert.equal(formatEventPrice("   "), "Ücretsiz");
+  test("returns null when the source gave no price, rather than calling it free", () => {
+    // A missing price means "unknown": scrapers write "Ücretsiz" themselves
+    // when a source marks an event free. Showing null as "Ücretsiz" listed
+    // stand-up shows and a circus as free whenever a detail page failed.
+    assert.equal(formatEventPrice(null), null);
+    assert.equal(formatEventPrice(""), null);
+    assert.equal(formatEventPrice("   "), null);
+  });
+
+  test("passes an explicit 'Ücretsiz' through", () => {
+    assert.equal(formatEventPrice("Ücretsiz"), "Ücretsiz");
+  });
+});
+
+describe("cardVenueLine", () => {
+  test("drops the venue when it repeats the company line", () => {
+    assert.equal(cardVenueLine("Diyarbakır DT", "Diyarbakır Devlet Tiyatrosu"), null);
+  });
+
+  test("spells out DT for a visiting company", () => {
+    assert.equal(cardVenueLine("Diyarbakır DT", "İzmir Devlet Tiyatrosu"), "Diyarbakır Devlet Tiyatrosu");
+  });
+
+  test("shortens other venues as before", () => {
+    assert.equal(cardVenueLine("Diyarbakır Mordem Sanat Merkezi", null), "Mordem Sanat Merkezi");
+    assert.equal(cardVenueLine("Diyarbakır DT Cahit Sıtkı Tarancı Kültür Merkezi", null), "DT Cahit Sıtkı Tarancı Kültür Merkezi");
+  });
+});
+
+describe("listingSection", () => {
+  // 2026-09-23 is a Wednesday.
+  const today = "2026-09-23";
+
+  test("names today and tomorrow", () => {
+    assert.equal(listingSection("2026-09-23", today).title, "Bugün");
+    assert.equal(listingSection("2026-09-24", today).title, "Yarın");
+  });
+
+  test("groups the rest of this week, Monday-based", () => {
+    const section = listingSection("2026-09-27", today); // Sunday
+    assert.equal(section.key, "bu-hafta");
+    assert.equal(section.title, "Bu hafta");
+    assert.equal(section.detail, "25 – 27 Eylül");
+  });
+
+  test("groups next week", () => {
+    const monday = listingSection("2026-09-28", today);
+    const sunday = listingSection("2026-10-04", today);
+    assert.equal(monday.key, "gelecek-hafta");
+    assert.equal(sunday.key, "gelecek-hafta");
+    assert.equal(monday.detail, "28 Eylül – 4 Ekim");
+  });
+
+  test("groups anything later by month, with the year only when it differs", () => {
+    assert.deepEqual(listingSection("2026-10-05", today), { key: "ay-2026-10", title: "Ekim", detail: "" });
+    assert.equal(listingSection("2027-01-17", today).title, "Ocak 2027");
+  });
+
+  test("on a Sunday, tomorrow starts next week", () => {
+    assert.equal(listingSection("2026-09-28", "2026-09-27").title, "Yarın");
+    assert.equal(listingSection("2026-09-29", "2026-09-27").key, "gelecek-hafta");
   });
 });

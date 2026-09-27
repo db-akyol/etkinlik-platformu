@@ -167,8 +167,8 @@ describe("itemToEvents", () => {
     assert.equal(unknown[0].category_name, null);
   });
 
-  test("reports a free event as having no price, not '0 TL'", () => {
-    assert.equal(itemToEvents(SAMPLE_ITEM)[0].price, null);
+  test("reports a free event as 'Ücretsiz', not '0 TL' or null", () => {
+    assert.equal(itemToEvents(SAMPLE_ITEM)[0].price, "Ücretsiz");
   });
 
   test("formats a paid event's price", () => {

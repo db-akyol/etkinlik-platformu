@@ -1,11 +1,15 @@
 import Link from "next/link";
 import FavoriteButton from "@/components/FavoriteButton";
+import PosterImage from "@/components/PosterImage";
+import { isFreePrice } from "@/lib/event-filters";
 import {
+  cardVenueLine,
+  formatDayChip,
   formatEventBadge,
   formatEventPrice,
   formatEventStamp,
   formatEventTime,
-  shortVenueName,
+  istanbulDayKey,
   splitEventTitle,
 } from "@/lib/format-event";
 import type { Category, EventRow, Venue } from "@/lib/supabase/types";
@@ -44,9 +48,17 @@ export default function EventCard({
   const { title, subtitle } = splitEventTitle(event.title);
   const badge = formatEventBadge(event.start_at);
   const stamp = formatEventStamp(event.start_at);
-  const when = dateShownAbove ? formatEventTime(event.start_at) : badge.text;
-  const isFree = !event.price || event.price.trim() === "";
-  const loading = priority ? "eager" : "lazy";
+  const time = formatEventTime(event.start_at);
+  // With the date stamp on the poster, the text line adds the weekday
+  // rather than repeating the date.
+  const when = dateShownAbove
+    ? time
+    : badge.soon
+      ? badge.text
+      : `${formatDayChip(istanbulDayKey(event.start_at)).weekday} ${time}`;
+  const price = formatEventPrice(event.price);
+  const isFree = isFreePrice(event.price);
+  const venueLine = event.venue?.name ? cardVenueLine(event.venue.name, subtitle) : null;
 
   return (
     <article className="group relative flex min-w-0 flex-col gap-2.5">
@@ -62,41 +74,19 @@ export default function EventCard({
         className="absolute inset-0 z-10 rounded-2xl"
       />
       <div className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl bg-surface-muted">
-        {event.image_url ? (
-          <>
-            {/* Posters are mostly portrait but some sources send wide
-             * banners. Blurred fill: a scaled, blurred copy of the image
-             * fills the frame and the real image sits on top with
-             * object-contain, so no poster loses its title or date to a
-             * crop. Both tags use the same URL, so it's one request.
-             * Plain <img> keeps this free of next.config.ts remote-image
-             * configuration. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={event.image_url}
-              alt=""
-              aria-hidden="true"
-              loading={loading}
-              decoding="async"
-              className="absolute inset-0 h-full w-full scale-125 object-cover blur-xl"
-            />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={event.image_url}
-              alt=""
-              loading={loading}
-              fetchPriority={priority ? "high" : undefined}
-              decoding="async"
-              className="relative h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.03]"
-            />
-          </>
-        ) : (
-          <div className="flex h-full w-full items-center justify-center px-4 text-center">
-            <span className="font-display text-lg font-bold text-muted">
-              {event.category?.name ?? "Etkinlik"}
-            </span>
-          </div>
-        )}
+        <PosterImage
+          src={event.image_url}
+          alt=""
+          priority={priority}
+          hoverZoom
+          fallback={
+            <div className="flex h-full w-full items-center justify-center bg-linear-to-br from-dicle-soft to-surface-muted px-4 text-center">
+              <span className="font-display text-lg font-bold text-muted">
+                {event.category?.name ?? "Etkinlik"}
+              </span>
+            </div>
+          }
+        />
 
         {!dateShownAbove && (
           // The same date is in the text below for screen readers.
@@ -136,14 +126,14 @@ export default function EventCard({
           {title}
         </h3>
         {subtitle && <p className="truncate text-[13px] text-muted">{subtitle}</p>}
-        {event.venue?.name && (
-          <p className="truncate text-[13px] text-muted">{shortVenueName(event.venue.name)}</p>
-        )}
+        {venueLine && <p className="truncate text-[13px] text-muted">{venueLine}</p>}
         <p className="mt-1 flex items-baseline justify-between gap-2 text-[13px]">
           <span className="truncate font-semibold text-dicle">{when}</span>
-          <span className={`shrink-0 font-semibold tabular-nums ${isFree ? "text-free" : "text-foreground"}`}>
-            {formatEventPrice(event.price)}
-          </span>
+          {price && (
+            <span className={`shrink-0 font-semibold tabular-nums ${isFree ? "text-free" : "text-foreground"}`}>
+              {price}
+            </span>
+          )}
         </p>
       </div>
     </article>

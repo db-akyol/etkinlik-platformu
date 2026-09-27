@@ -113,18 +113,18 @@ describe("parsePriceTL", () => {
     assert.equal(parsePriceTL("300 - 500 TL"), 300);
   });
 
-  test("returns 0 for free and null for no number", () => {
-    assert.equal(parsePriceTL(null), 0);
-    assert.equal(parsePriceTL("  "), 0);
+  test("returns 0 for free and null for unknown or no number", () => {
+    assert.equal(parsePriceTL(null), null);
+    assert.equal(parsePriceTL("  "), null);
     assert.equal(parsePriceTL("Ücretsiz"), 0);
     assert.equal(parsePriceTL("Kapıda satış"), null);
   });
 });
 
 describe("isFreePrice", () => {
-  test("recognizes empty and spelled-out prices", () => {
-    assert.equal(isFreePrice(null), true);
-    assert.equal(isFreePrice(""), true);
+  test("recognizes spelled-out free prices, but not a missing one", () => {
+    assert.equal(isFreePrice(null), false);
+    assert.equal(isFreePrice(""), false);
     assert.equal(isFreePrice("Ücretsiz giriş"), true);
     assert.equal(isFreePrice("75 TL"), false);
   });
@@ -132,12 +132,14 @@ describe("isFreePrice", () => {
 
 describe("matchesPriceFilter", () => {
   test("'ucretsiz' keeps only free events", () => {
-    assert.equal(matchesPriceFilter(null, "ucretsiz"), true);
+    assert.equal(matchesPriceFilter("Ücretsiz", "ucretsiz"), true);
     assert.equal(matchesPriceFilter("70 TL", "ucretsiz"), false);
+    assert.equal(matchesPriceFilter(null, "ucretsiz"), false);
   });
 
   test("'300' keeps free events and anything up to 300 TL", () => {
-    assert.equal(matchesPriceFilter(null, "300"), true);
+    assert.equal(matchesPriceFilter("Ücretsiz", "300"), true);
+    assert.equal(matchesPriceFilter(null, "300"), false);
     assert.equal(matchesPriceFilter("300 TL", "300"), true);
     assert.equal(matchesPriceFilter("301 TL", "300"), false);
     assert.equal(matchesPriceFilter("1.000 TL", "300"), false);

@@ -1,7 +1,7 @@
 import EventCardSkeleton, { EVENT_GRID_CLASS } from "@/components/EventCardSkeleton";
 
 // Mirrors app/(public)/page.tsx: side panel on desktop, date strip and chips
-// on phones, then a heading row and one day group — so nothing reflows when
+// on phones, then a heading row and one section — so nothing reflows when
 // the real content swaps in.
 export default function HomeLoading() {
   return (

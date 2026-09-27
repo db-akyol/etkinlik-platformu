@@ -4,8 +4,9 @@ import { notFound } from "next/navigation";
 import { type EventWithRelations } from "@/components/EventCard";
 import EventMap from "@/components/EventMap";
 import FavoriteButton from "@/components/FavoriteButton";
+import PosterImage from "@/components/PosterImage";
 import { ChevronLeftIcon, ExternalIcon } from "@/components/icons";
-import { getUpcomingFloor } from "@/lib/event-filters";
+import { getUpcomingFloor, isFreePrice } from "@/lib/event-filters";
 import {
   formatDayLong,
   formatEventDateTime,
@@ -175,6 +176,7 @@ export default async function EventDetailPage({
   // Sources without a real description often repeat the title there.
   const description = event.description?.trim() !== event.title.trim() ? event.description : null;
   const sourceHost = event.source_type === "scraped" ? hostnameOf(event.source_url) : null;
+  const price = formatEventPrice(event.price);
 
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-5 sm:px-6 md:py-8 lg:px-8">
@@ -186,49 +188,39 @@ export default async function EventDetailPage({
         Tüm etkinlikler
       </Link>
 
-      <article className="mt-5 grid gap-7 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] md:gap-12">
-        <div className="relative mx-auto aspect-[4/5] w-full max-w-sm overflow-hidden rounded-3xl bg-surface-muted md:sticky md:top-24 md:self-start">
-          {event.image_url ? (
-            <>
-              {/* Same blurred-fill treatment as EventCard: the whole poster
-               * stays visible whatever its proportions. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={event.image_url}
-                alt=""
-                aria-hidden="true"
-                className="absolute inset-0 h-full w-full scale-125 object-cover blur-2xl"
-              />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={event.image_url}
-                alt={`${title} afişi`}
-                fetchPriority="high"
-                className="relative h-full w-full object-contain"
-              />
-            </>
-          ) : (
-            <div className="flex h-full w-full items-center justify-center bg-linear-to-br from-dicle to-dicle-dim">
-              <span className="font-display text-2xl font-bold text-on-dicle">
-                {event.category?.name ?? "Etkinlik"}
-              </span>
-            </div>
-          )}
+      {/* Phones: a small poster beside the title, so the date, price and
+       * ticket link make the first screen instead of sitting under a
+       * full-width poster. From md up: poster column on the left, sticky,
+       * spanning both rows of the right column. */}
+      <article className="mt-5 grid grid-cols-[7.5rem_minmax(0,1fr)] gap-x-4 gap-y-6 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-x-6 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] md:grid-rows-[auto_1fr] md:gap-x-12">
+        <div className="relative aspect-[4/5] w-full self-start overflow-hidden rounded-2xl bg-surface-muted md:sticky md:top-24 md:row-span-2 md:rounded-3xl">
+          <PosterImage
+            src={event.image_url}
+            alt={`${title} afişi`}
+            priority
+            fallback={
+              <div className="flex h-full w-full items-center justify-center bg-linear-to-br from-dicle to-dicle-dim px-2 text-center">
+                <span className="font-display text-base font-bold text-on-dicle md:text-2xl">
+                  {event.category?.name ?? "Etkinlik"}
+                </span>
+              </div>
+            }
+          />
         </div>
 
-        <div className="flex min-w-0 flex-col gap-6">
-          <div className="flex flex-col gap-3">
-            {event.category && (
-              <span className="self-start rounded-full bg-dicle-soft px-3 py-1 text-xs font-semibold text-foreground">
-                {event.category.name}
-              </span>
-            )}
-            <h1 className="font-display text-4xl leading-[1.05] font-extrabold tracking-tight text-balance sm:text-5xl">
-              {title}
-            </h1>
-            {subtitle && <p className="text-lg text-muted">{subtitle}</p>}
-          </div>
+        <div className="flex min-w-0 flex-col gap-2 self-center md:gap-3 md:self-end">
+          {event.category && (
+            <span className="self-start rounded-full bg-dicle-soft px-3 py-1 text-xs font-semibold text-foreground">
+              {event.category.name}
+            </span>
+          )}
+          <h1 className="font-display text-2xl leading-[1.1] font-extrabold tracking-tight text-balance sm:text-4xl md:text-5xl md:leading-[1.05]">
+            {title}
+          </h1>
+          {subtitle && <p className="text-sm text-muted sm:text-lg">{subtitle}</p>}
+        </div>
 
+        <div className="col-span-2 flex min-w-0 flex-col gap-6 md:col-span-1 md:col-start-2">
           <dl className="grid gap-x-6 gap-y-4 rounded-2xl border border-line bg-surface p-5 sm:grid-cols-2">
             <div>
               <dt className="text-[13px] font-semibold text-muted">Tarih</dt>
@@ -237,7 +229,13 @@ export default async function EventDetailPage({
             </div>
             <div>
               <dt className="text-[13px] font-semibold text-muted">Fiyat</dt>
-              <dd className="mt-0.5 font-semibold tabular-nums">{formatEventPrice(event.price)}</dd>
+              {price ? (
+                <dd className={`mt-0.5 font-semibold tabular-nums ${isFreePrice(event.price) ? "text-free" : ""}`}>
+                  {price}
+                </dd>
+              ) : (
+                <dd className="mt-0.5 text-muted">Kaynakta belirtilmemiş</dd>
+              )}
             </div>
             {event.venue && (
               <div className="sm:col-span-2">
@@ -286,9 +284,11 @@ export default async function EventDetailPage({
                           {formatEventTime(session.start_at)}
                         </span>
                       </span>
-                      <span className="shrink-0 text-sm text-muted tabular-nums">
-                        {formatEventPrice(session.price)}
-                      </span>
+                      {formatEventPrice(session.price) && (
+                        <span className="shrink-0 text-sm text-muted tabular-nums">
+                          {formatEventPrice(session.price)}
+                        </span>
+                      )}
                     </Link>
                   </li>
                 ))}

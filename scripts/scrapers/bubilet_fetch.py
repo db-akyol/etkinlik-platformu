@@ -61,18 +61,26 @@ HEADERS = {
 
 
 def pick_image_url(files):
-    """Prefers the horizontal ("yatayResim") image bubilet provides, to
-    match the 16:9 card thumbnail every other source's image is shown in.
-    Falls back to whatever image comes first if that display area is
-    missing."""
+    """Prefers the vertical poster ("dikeyResim") bubilet provides, to match
+    the portrait (4:5) card and detail-page frames, then the horizontal one
+    ("yatayResim"), then whatever image comes first.
+
+    Relative paths are resolved against cdn.bubilet.com.tr, NOT
+    www.bubilet.com.tr: the www host answers /files/... with a redirect to
+    the CDN, and that redirect carries a same-origin
+    Cross-Origin-Resource-Policy, so browsers refuse to show the image on
+    any other site (ERR_BLOCKED_BY_RESPONSE.NotSameOrigin). The CDN serves
+    the same file without that header."""
     if not files:
         return None
-    horizontal = next((f for f in files if f.get("displayArea") == "yatayResim"), None)
-    chosen = horizontal or files[0]
+    by_area = {f.get("displayArea"): f for f in files}
+    chosen = by_area.get("dikeyResim") or by_area.get("yatayResim") or files[0]
     rel_url = chosen.get("url", "")
     if not rel_url:
         return None
-    return f"https://www.bubilet.com.tr{rel_url}" if rel_url.startswith("/") else rel_url
+    if rel_url.startswith("/"):
+        return f"https://cdn.bubilet.com.tr{rel_url}"
+    return rel_url.replace("://www.bubilet.com.tr/files/", "://cdn.bubilet.com.tr/files/", 1)
 
 
 def is_actually_diyarbakir(item):

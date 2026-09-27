@@ -110,7 +110,7 @@ function runPython(pythonBin: string, outputPath: string): Promise<void> {
 /** Bubilet's price is a discountable numeric TL amount; `formatPriceTL`
  *  expects a bare number the same way every other parser's price does. */
 function resolvePrice(item: BubiletRawEvent): string | null {
-  if (item.is_free) return null;
+  if (item.is_free) return "Ücretsiz";
   const amount = item.discounted_price ?? item.price;
   return amount != null ? formatPriceTL(amount) : null;
 }

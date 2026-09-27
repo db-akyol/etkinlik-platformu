@@ -36,9 +36,26 @@ commit edilen her şey `main`'e değil bu dala gider.
   Logo: plaka kodu "21" yazan takvim yaprağı.
 - **Görünüm başlıkları:** "Hep Yek - İSTANBUL DT - 22.DOA" → "Hep Yek" +
   "İstanbul Devlet Tiyatrosu" (`splitEventTitle`, sadece gösterim).
-- **Bilinen:** bubilet posterleri tarayıcıda yüklenmiyor
-  (`ERR_BLOCKED_BY_RESPONSE.NotSameOrigin`, bubilet'in CORP başlığı).
-  Tasarımdan önce de vardı, henüz çözülmedi.
+- **Tüm günler görünümü:** gün başına başlık yerine bölümler: Bugün,
+  Yarın, Bu hafta, Gelecek hafta, sonra ay ay (`listingSection`,
+  `lib/format-event.ts`). Günlerin çoğunda 1-2 etkinlik olduğu için gün
+  başlıkları sayfayı başlık yığınına çeviriyordu. Bugün/Yarın dışındaki
+  kartlar tarihi afişteki takvim yaprağında, gün adını metinde gösterir.
+- **Detay sayfası (telefon):** küçük afiş başlığın yanında; tarih, fiyat
+  ve bilet düğmesi ilk ekranda.
+- **Bozuk afiş:** `components/PosterImage.tsx` yüklenemeyen görselin
+  yerine kategori adlı bir kutu gösterir.
+- **bubilet afişleri (çözüldü):** `www.bubilet.com.tr/files/...` CDN'e
+  yönlendiriyor ve o yönlendirme `Cross-Origin-Resource-Policy:
+  same-origin` taşıyordu (`ERR_BLOCKED_BY_RESPONSE.NotSameOrigin`).
+  `bubilet_fetch.py` artık doğrudan `cdn.bubilet.com.tr` adresini ve dikey
+  afişi (`dikeyResim`) yazıyor; mevcut satırlar bir sonraki scrape'te
+  güncellenir.
+- **Fiyat:** boş fiyat artık "Ücretsiz" sayılmıyor, "bilinmiyor" demek
+  (kartta gösterilmez, detayda "Kaynakta belirtilmemiş"). Kaynak ücretsiz
+  diyorsa scraper'lar (bubilet `is_free`, belediye `isFree`) "Ücretsiz"
+  yazar; admin de elle "Ücretsiz" yazar. Eskiden detay sayfası
+  yüklenemeyen stand-up ve sirk gösterileri "Ücretsiz" görünüyordu.
 - **Neden taslak önce:** 2026-09-16'daki "Kara Amid" tasarımı plan
   onayından sonra kodlanıp tamamen reddedilmişti. Bu sefer önce görsel
   taslak gösterildi, seçilen yön öyle uygulandı.

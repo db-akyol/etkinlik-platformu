@@ -91,26 +91,27 @@ export function parseDayParam(gun: string | undefined): string | undefined {
 }
 
 /**
- * Whether a stored price means "free". Sources leave the field empty for
- * free events (and, unavoidably, when they fail to publish a price — see
- * `formatEventPrice`), and some write the word out.
+ * Whether a stored price says "free". Scrapers write "Ücretsiz" for events
+ * their source marks free, and admins type it; an empty price is unknown,
+ * not free (see `formatEventPrice`).
  */
 export function isFreePrice(price: string | null): boolean {
-  return !price || price.trim() === "" || /ücretsiz|bedava/i.test(price);
+  return !!price && /ücretsiz|bedava/i.test(price);
 }
 
 /**
  * Reads the lowest TL amount out of a free-text price ("600 TL",
  * "1.000 TL", "300 - 500 TL", "₺150,50"). Returns 0 for a free event and
- * null when the text has no number in it at all.
+ * null when the price is unknown or has no number in it at all.
  *
  * Turkish formatting uses "." for thousands and "," for decimals, so "1.000"
  * is one thousand, not one. Kuruş are dropped: the only use is a coarse
  * "under 300 TL" filter.
  */
 export function parsePriceTL(price: string | null): number | null {
+  if (!price || price.trim() === "") return null;
   if (isFreePrice(price)) return 0;
-  const match = price!.match(/\d{1,3}(?:\.\d{3})+|\d+/);
+  const match = price.match(/\d{1,3}(?:\.\d{3})+|\d+/);
   return match ? Number.parseInt(match[0].replace(/\./g, ""), 10) : null;
 }
 

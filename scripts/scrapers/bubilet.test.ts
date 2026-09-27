@@ -55,9 +55,9 @@ describe("itemToEvent", () => {
     assert.equal(event?.price, "900 TL");
   });
 
-  test("stores a free event's price as null, not '0 TL'", () => {
+  test("stores a free event's price as 'Ücretsiz', not '0 TL' or null", () => {
     const event = itemToEvent({ ...SAMPLE, is_free: true });
-    assert.equal(event?.price, null);
+    assert.equal(event?.price, "Ücretsiz");
   });
 
   test("composes a description from performers", () => {

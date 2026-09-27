@@ -40,10 +40,15 @@ export function formatEventDateTime(iso: string): string {
   return `${datePart}, ${timePart}`;
 }
 
-/** Returns the display price, or "Ücretsiz" when there is none set. */
-export function formatEventPrice(price: string | null): string {
-  if (!price || price.trim() === "") return "Ücretsiz";
-  return price;
+/**
+ * Returns the display price, or null when none is known. A missing price is
+ * NOT "free": scrapers store "Ücretsiz" themselves when the source marks an
+ * event free, so an empty field only means the source didn't say (or its
+ * detail page failed to load).
+ */
+export function formatEventPrice(price: string | null): string | null {
+  if (!price || price.trim() === "") return null;
+  return price.trim();
 }
 
 /** The Istanbul calendar day a given instant falls on, as "YYYY-MM-DD". */
@@ -107,6 +112,55 @@ export function formatDayHeading(dayKey: string, todayKey: string): { title: str
   return { title: weekday, detail: dayMonth };
 }
 
+const DAY_MS = 86_400_000;
+
+function addDays(dayKey: string, days: number): string {
+  return new Date(dayKeyDate(dayKey).getTime() + days * DAY_MS).toISOString().slice(0, 10);
+}
+
+/** "25 – 27 Eylül" or "28 Eylül – 4 Ekim". */
+function formatDayRange(from: string, to: string): string {
+  const sameMonth = from.slice(0, 7) === to.slice(0, 7);
+  const start = formatDayKey(from, sameMonth ? { day: "numeric" } : { day: "numeric", month: "long" });
+  return `${start} – ${formatDayKey(to, { day: "numeric", month: "long" })}`;
+}
+
+/**
+ * The section of the all-days listing an event day falls in: "Bugün",
+ * "Yarın", "Bu hafta" (the rest of this Monday-to-Sunday week), "Gelecek
+ * hafta", then one section per month. Coarser than one heading per day on
+ * purpose: most days have one or two events, and a heading per day left the
+ * page mostly headings.
+ */
+export function listingSection(
+  dayKey: string,
+  todayKey: string,
+): { key: string; title: string; detail: string } {
+  const diff = Math.round((dayKeyDate(dayKey).getTime() - dayKeyDate(todayKey).getTime()) / DAY_MS);
+  if (diff <= 1) {
+    const heading = formatDayHeading(dayKey, todayKey);
+    return { key: diff <= 0 ? "bugun" : "yarin", title: heading.title, detail: heading.detail };
+  }
+
+  // Monday-based weeks: getUTCDay() is 0 for Sunday.
+  const thisSunday = addDays(todayKey, (7 - dayKeyDate(todayKey).getUTCDay()) % 7);
+  const nextSunday = addDays(thisSunday, 7);
+  if (dayKey <= thisSunday) {
+    return { key: "bu-hafta", title: "Bu hafta", detail: formatDayRange(addDays(todayKey, 2), thisSunday) };
+  }
+  if (dayKey <= nextSunday) {
+    return { key: "gelecek-hafta", title: "Gelecek hafta", detail: formatDayRange(addDays(thisSunday, 1), nextSunday) };
+  }
+
+  const month = formatDayKey(dayKey, { month: "long" });
+  const sameYear = dayKey.slice(0, 4) === todayKey.slice(0, 4);
+  return {
+    key: `ay-${dayKey.slice(0, 7)}`,
+    title: sameYear ? month : `${month} ${dayKey.slice(0, 4)}`,
+    detail: "",
+  };
+}
+
 /** Short weekday and day number for the mobile date strip: { weekday: "Cmt", day: "26" }. */
 export function formatDayChip(dayKey: string): { weekday: string; day: string } {
   return {
@@ -153,6 +207,20 @@ export function splitEventTitle(title: string): { title: string; subtitle: strin
 export function shortVenueName(name: string): string {
   const rest = name.replace(/^Diyarbakır\s+/u, "");
   return rest.trim().split(/\s+/).length >= 2 ? rest : name;
+}
+
+/**
+ * The venue line under a card's title: the short venue name, with a
+ * trailing "DT" spelled out ("Diyarbakır DT" → "Diyarbakır Devlet
+ * Tiyatrosu") to match the company line `splitEventTitle` produces. Null
+ * when that would repeat the company line word for word — a home
+ * production at its own theatre otherwise read "Diyarbakır Devlet
+ * Tiyatrosu / Diyarbakır DT".
+ */
+export function cardVenueLine(venueName: string, subtitle: string | null): string | null {
+  const line = shortVenueName(venueName).replace(/\sDT$/u, " Devlet Tiyatrosu");
+  const same = subtitle && line.toLocaleLowerCase("tr-TR") === subtitle.toLocaleLowerCase("tr-TR");
+  return same ? null : line;
 }
 
 /**
