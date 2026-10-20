@@ -25,9 +25,11 @@ const geistMono = Geist_Mono({
 });
 
 const SITE_NAME = "Diyarbakır Etkinlik";
-const SITE_TITLE = `${SITE_NAME} — Şehirdeki tüm etkinlikler`;
+// Worded for the "diyarbakır etkinlik(leri)" searches the site is for: the
+// home page's search result shows this title and description verbatim.
+const SITE_TITLE = "Diyarbakır Etkinlikleri — Konser, Tiyatro ve Etkinlik Takvimi";
 const SITE_DESCRIPTION =
-  "Diyarbakır'daki konser, tiyatro, atölye, fuar ve spor etkinliklerini tek yerden keşfedin.";
+  "Diyarbakır'daki konser, tiyatro, stand-up ve çocuk etkinlikleri tek yerde: tarih, mekân, fiyat ve bilet bağlantılarıyla, her gün güncel.";
 
 export const metadata: Metadata = {
   // Lets pages below give Open Graph images and canonical links as relative

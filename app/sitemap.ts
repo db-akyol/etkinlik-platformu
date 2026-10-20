@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { getUpcomingFloor } from "@/lib/event-filters";
 import { getSiteUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 
@@ -24,11 +25,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ];
 
+  // Upcoming events only — the same cut-off as the listing. Past events'
+  // pages stay reachable but carry `noindex` (see isPastEvent in
+  // lib/event-seo.ts); listing them here asked crawlers to spend their time
+  // on shows that already happened, and by October 2026 those were half the
+  // sitemap.
+  const floor = getUpcomingFloor();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("events")
     .select("id, created_at")
     .eq("status", "approved")
+    .or(`start_at.gte.${floor},end_at.gte.${floor}`)
     .order("start_at", { ascending: true })
     .returns<{ id: string; created_at: string | null }[]>();
 

@@ -22,7 +22,9 @@ import {
   type ListingParams,
 } from "@/lib/event-filters";
 import { formatDayLong, formatEventDateTime, istanbulDayKey, listingSection } from "@/lib/format-event";
+import { serializeJsonLd } from "@/lib/event-seo";
 import { istanbulTodayDateString } from "@/lib/istanbul-time";
+import { getSiteUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 import type { Category, City } from "@/lib/supabase/types";
 
@@ -219,6 +221,20 @@ export default async function Home({
 
   return (
     <div className="mx-auto w-full max-w-[90rem] 2xl:max-w-[104rem] flex-1 px-4 sm:px-6 lg:px-8">
+      <script
+        type="application/ld+json"
+        // Gives search engines the site's name for its results.
+        dangerouslySetInnerHTML={{
+          __html: serializeJsonLd({
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            name: "Diyarbakır Etkinlik",
+            alternateName: "Diyarbakır Etkinlikleri",
+            url: `${getSiteUrl()}/`,
+            inLanguage: "tr-TR",
+          }),
+        }}
+      />
       <div className="md:grid md:grid-cols-[15rem_minmax(0,1fr)] md:gap-10 md:py-8">
         <aside
           aria-label="Filtreler"
@@ -240,7 +256,7 @@ export default async function Home({
           <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 pt-2 md:pt-0">
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
               <h1 className="font-display text-2xl font-extrabold tracking-tight text-balance md:text-3xl">
-                {gun ? formatDayLong(gun) : "Yaklaşan etkinlikler"}
+                {gun ? formatDayLong(gun) : "Diyarbakır etkinlikleri"}
               </h1>
               {!hasError && (
                 <p className="text-sm text-muted tabular-nums">{items.length} etkinlik</p>
@@ -280,6 +296,15 @@ export default async function Home({
               </Link>
             </nav>
           </div>
+
+          {!gun && !hasFilters && (
+            // The one paragraph of plain text on the page: tells a first-time
+            // visitor (and a search engine) what this list is.
+            <p className="-mt-3 mb-6 max-w-2xl text-sm text-muted">
+              Diyarbakır&apos;daki konser, tiyatro, stand-up ve çocuk etkinlikleri tek yerde. Liste Biletinial,
+              Biletix, Bubilet ve Büyükşehir Belediyesi&apos;nden günde iki kez güncellenir.
+            </p>
+          )}
 
           {hasError ? (
             <div

@@ -7,6 +7,7 @@ import FavoriteButton from "@/components/FavoriteButton";
 import PosterImage from "@/components/PosterImage";
 import { ChevronLeftIcon, ExternalIcon } from "@/components/icons";
 import { getUpcomingFloor, isFreePrice } from "@/lib/event-filters";
+import { eventJsonLd, eventMetaDescription, eventPageTitle, isPastEvent, serializeJsonLd } from "@/lib/event-seo";
 import {
   formatDayLong,
   formatEventDateTime,
@@ -15,6 +16,7 @@ import {
   istanbulDayKey,
   splitEventTitle,
 } from "@/lib/format-event";
+import { getSiteUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 import type { EventRow } from "@/lib/supabase/types";
 
@@ -63,9 +65,10 @@ export async function generateMetadata({
     return { title: "Etkinlik bulunamadı" };
   }
 
-  const description =
-    event.description?.slice(0, 160) ??
-    `${event.title} - ${formatEventDateTime(event.start_at)}`;
+  // Spelled out for the search result, which shows only these two lines:
+  // see lib/event-seo.ts.
+  const title = eventPageTitle(event);
+  const description = eventMetaDescription(event);
 
   // Next merges metadata shallowly, so this `openGraph` replaces the root
   // layout's outright — `type`, `locale` and `siteName` have to be repeated
@@ -76,15 +79,18 @@ export async function generateMetadata({
   const images = event.image_url ? [event.image_url] : ["/og-default.png"];
 
   return {
-    title: event.title,
+    title,
     description,
     alternates: { canonical: path },
+    // A past event's page stays up (old links keep working) but leaves the
+    // index, so search results don't fill with shows that already happened.
+    ...(isPastEvent(event, getUpcomingFloor()) ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
       type: "website",
       locale: "tr_TR",
       siteName: "Diyarbakır Etkinlik",
       url: path,
-      title: event.title,
+      title,
       description,
       images,
     },
@@ -94,7 +100,7 @@ export async function generateMetadata({
     // on X as the generic site title with the generic card image.
     twitter: {
       card: "summary_large_image",
-      title: event.title,
+      title,
       description,
       images,
     },
@@ -180,6 +186,13 @@ export default async function EventDetailPage({
 
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-5 sm:px-6 md:py-8 lg:px-8">
+      <script
+        type="application/ld+json"
+        // Escaped in serializeJsonLd: titles and descriptions are scraped text.
+        dangerouslySetInnerHTML={{
+          __html: serializeJsonLd(eventJsonLd(event, `${getSiteUrl()}/etkinlik/${event.id}`)),
+        }}
+      />
       <Link
         href="/"
         className="-ml-1 inline-flex items-center gap-1 text-sm font-semibold text-muted transition-colors hover:text-foreground"

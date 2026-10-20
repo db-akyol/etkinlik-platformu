@@ -94,6 +94,12 @@ manuel giriş sadece ulaşılamayan etkinlikler için yedektir.
   `twitter` unutulduğunda her etkinlik X'te genel site başlığıyla
   paylaşılıyordu. Aynı sebeple kökte `canonical`/`og:url` **yok** (miras
   kalsaydı 150 etkinlik sayfası ana sayfanın kopyası ilan edilirdi).
+- **Arama motoru (2026-10-20)** — etkinlik sayfalarının başlık ve
+  açıklaması tarih, mekân ve şehri yazıyor; her sayfada schema.org
+  `Event` JSON-LD var (Google'ın etkinlik listelerine girebilmesi için),
+  ana sayfada `WebSite`. Hepsi `lib/event-seo.ts`'te ve test edildi. Bitmiş
+  etkinlikler sitemap'te yok ve sayfaları `noindex` (link çalışmaya devam
+  ediyor). Ana sayfanın H1'i "Diyarbakır etkinlikleri".
 - **Test + CI** — `npm test` (ağ/DB gerektirmez) ve her push'ta
   typecheck + lint + test + build çalıştıran `.github/workflows/ci.yml`.
 
