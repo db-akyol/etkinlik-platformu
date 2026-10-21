@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = getSiteUrl();
 
-  // The listing is the only static page worth indexing. /giris and /kayit are
+  // The listing and its category pages (added below) are the only
+  // non-event pages worth indexing. /giris and /kayit are
   // forms with no content, /favoriler needs a session, and /offline is a PWA
   // fallback — robots.ts tells crawlers to skip them rather than listing them
   // here with a low priority.
@@ -34,17 +35,29 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("events")
-    .select("id, created_at")
+    .select("id, created_at, category:categories(slug)")
     .eq("status", "approved")
     .or(`start_at.gte.${floor},end_at.gte.${floor}`)
     .order("start_at", { ascending: true })
-    .returns<{ id: string; created_at: string | null }[]>();
+    .returns<{ id: string; created_at: string | null; category: { slug: string } | null }[]>();
 
   if (error) {
     // A sitemap that is missing its event URLs still beats a 500, which some
     // crawlers cache as "this site has no sitemap".
     console.error("[sitemap] approved event lookup failed:", error);
     return entries;
+  }
+
+  // One page per category that has something coming up — an empty category
+  // page is nothing worth sending a crawler to.
+  const categorySlugs = [...new Set((data ?? []).flatMap((event) => (event.category ? [event.category.slug] : [])))];
+  for (const slug of categorySlugs.sort()) {
+    entries.push({
+      url: `${base}/kategori/${slug}`,
+      lastModified: new Date(),
+      changeFrequency: "daily",
+      priority: 0.9,
+    });
   }
 
   for (const event of data ?? []) {

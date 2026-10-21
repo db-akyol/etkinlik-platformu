@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { SearchIcon } from "@/components/icons";
 import { SEARCH_BOX_CLASS } from "@/components/search-box-class";
-import { buildListingHref, type ListingParams } from "@/lib/event-filters";
+import { buildListingHref, listingParamsFromUrl } from "@/lib/event-filters";
 
 const INPUT_ID = "site-search";
 
@@ -20,8 +20,10 @@ export default function HeaderSearch() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const onListing = pathname === "/";
-  const urlQuery = onListing ? (searchParams.get("q") ?? "") : "";
+  // The home page or a category page; null anywhere else.
+  const listingParams = listingParamsFromUrl(pathname, searchParams);
+  const onListing = listingParams !== null;
+  const urlQuery = listingParams?.q ?? "";
 
   const [value, setValue] = useState(urlQuery);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -41,8 +43,7 @@ export default function HeaderSearch() {
   }, []);
 
   function hrefFor(query: string) {
-    const params = onListing ? (Object.fromEntries(searchParams.entries()) as ListingParams) : {};
-    return buildListingHref(params, { q: query.trim() || undefined });
+    return buildListingHref(listingParams ?? {}, { q: query.trim() || undefined });
   }
 
   function handleChange(next: string) {

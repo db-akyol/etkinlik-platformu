@@ -1,10 +1,28 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// Protects /admin/* routes. Now that public visitors can also have accounts
-// (for favoriting), "has a session" is no longer enough — only users listed
-// in the admin_users table may enter. See supabase/migrations/0002_*.sql.
+// Two jobs:
+//
+// 1. "/?kategori=<slug>" is where category filters used to live; it now
+//    308s to the category's own page, /kategori/<slug>, keeping the other
+//    filters. The home page can't do this itself with a real status code:
+//    it streams behind a loading state, so by the time it runs the 200 is
+//    already sent and redirect() degrades to a <meta http-equiv="refresh">.
+//
+// 2. Protects /admin/* routes. Now that public visitors can also have
+//    accounts (for favoriting), "has a session" is no longer enough — only
+//    users listed in the admin_users table may enter. See
+//    supabase/migrations/0002_*.sql.
 export async function middleware(request: NextRequest) {
+  if (request.nextUrl.pathname === "/") {
+    const slug = request.nextUrl.searchParams.get("kategori");
+    if (!slug) return NextResponse.next();
+    const url = request.nextUrl.clone();
+    url.pathname = `/kategori/${encodeURIComponent(slug)}`;
+    url.searchParams.delete("kategori");
+    return NextResponse.redirect(url, 308);
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -72,5 +90,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: ["/", "/admin/:path*"],
 };

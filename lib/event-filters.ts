@@ -36,8 +36,33 @@ export function buildListingHref(
     const value = merged[key];
     if (value) search.set(key, value);
   }
+  // A category has its own page; everything else is a query on it.
+  const path = merged.kategori ? `/kategori/${encodeURIComponent(merged.kategori)}` : "/";
+  search.delete("kategori");
   const query = search.toString();
-  return query ? `/?${query}` : "/";
+  return query ? `${path}?${query}` : path;
+}
+
+const CATEGORY_PATH = /^\/kategori\/([^/]+)$/;
+
+/**
+ * The listing filters for a URL, for client components that only have the
+ * pathname and search params: the home page ("/") and the category pages
+ * ("/kategori/<slug>", whose category comes from the path). Null anywhere
+ * else.
+ */
+export function listingParamsFromUrl(
+  pathname: string,
+  searchParams: URLSearchParams,
+): ListingParams | null {
+  const params: ListingParams = {};
+  for (const key of PARAM_ORDER) {
+    const value = searchParams.get(key);
+    if (value && key !== "kategori") params[key] = value;
+  }
+  if (pathname === "/") return params;
+  const match = pathname.match(CATEGORY_PATH);
+  return match ? { ...params, kategori: decodeURIComponent(match[1]) } : null;
 }
 
 /**

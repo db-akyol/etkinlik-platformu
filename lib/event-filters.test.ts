@@ -13,6 +13,7 @@ import {
   calendarStartMonth,
   getUpcomingFloor,
   isFreePrice,
+  listingParamsFromUrl,
   matchesPriceFilter,
   parseDayParam,
   parsePriceTL,
@@ -74,24 +75,54 @@ describe("buildListingHref", () => {
   test("adds a param and keeps the others", () => {
     assert.equal(
       buildListingHref({ kategori: "konser" }, { gun: "2026-09-26" }),
-      "/?kategori=konser&gun=2026-09-26",
+      "/kategori/konser?gun=2026-09-26",
     );
   });
 
   test("removes a param set to undefined or empty", () => {
-    assert.equal(buildListingHref({ kategori: "konser", gun: "2026-09-26" }, { gun: undefined }), "/?kategori=konser");
+    assert.equal(buildListingHref({ kategori: "konser", gun: "2026-09-26" }, { gun: undefined }), "/kategori/konser");
+    assert.equal(buildListingHref({ kategori: "konser", gun: "2026-09-26" }, { kategori: undefined }), "/?gun=2026-09-26");
     assert.equal(buildListingHref({ fiyat: "300" }, { fiyat: "" }), "/");
   });
 
   test("always emits keys in the same order", () => {
     assert.equal(
-      buildListingHref({ gorunum: "harita", q: "caz" }, { kategori: "konser" }),
-      "/?q=caz&kategori=konser&gorunum=harita",
+      buildListingHref({ gorunum: "harita", q: "caz", fiyat: "300" }, { gun: "2026-09-26" }),
+      "/?q=caz&gun=2026-09-26&fiyat=300&gorunum=harita",
     );
   });
 
   test("encodes search text", () => {
     assert.equal(buildListingHref({}, { q: "Şehinşah & co" }), "/?q=%C5%9Eehin%C5%9Fah+%26+co");
+  });
+
+  test("puts the category in the path, on its own page", () => {
+    assert.equal(buildListingHref({ q: "caz" }, { kategori: "stand-up" }), "/kategori/stand-up?q=caz");
+  });
+});
+
+describe("listingParamsFromUrl", () => {
+  test("reads the home page's search params", () => {
+    assert.deepEqual(listingParamsFromUrl("/", new URLSearchParams("q=caz&gun=2026-09-26")), {
+      q: "caz",
+      gun: "2026-09-26",
+    });
+  });
+
+  test("reads the category from a category page's path", () => {
+    assert.deepEqual(listingParamsFromUrl("/kategori/konser", new URLSearchParams("fiyat=300")), {
+      fiyat: "300",
+      kategori: "konser",
+    });
+  });
+
+  test("returns null off the listing", () => {
+    assert.equal(listingParamsFromUrl("/etkinlik/abc", new URLSearchParams()), null);
+    assert.equal(listingParamsFromUrl("/kategori/konser/x", new URLSearchParams()), null);
+  });
+
+  test("ignores a ?kategori= that contradicts the path", () => {
+    assert.equal(listingParamsFromUrl("/kategori/konser", new URLSearchParams("kategori=tiyatro"))?.kategori, "konser");
   });
 });
 

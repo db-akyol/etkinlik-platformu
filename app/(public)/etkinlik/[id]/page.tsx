@@ -223,9 +223,12 @@ export default async function EventDetailPage({
 
         <div className="flex min-w-0 flex-col gap-2 self-center md:gap-3 md:self-end">
           {event.category && (
-            <span className="self-start rounded-full bg-dicle-soft px-3 py-1 text-xs font-semibold text-foreground">
+            <Link
+              href={`/kategori/${event.category.slug}`}
+              className="self-start rounded-full bg-dicle-soft px-3 py-1 text-xs font-semibold text-foreground transition-colors hover:bg-line-strong"
+            >
               {event.category.name}
-            </span>
+            </Link>
           )}
           <h1 className="font-display text-2xl leading-[1.1] font-extrabold tracking-tight text-balance sm:text-4xl md:text-5xl md:leading-[1.05]">
             {title}

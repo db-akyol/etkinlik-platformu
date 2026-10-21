@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { CompassIcon, HeartIcon, MapPinIcon, UserIcon } from "@/components/icons";
-import { buildListingHref, type ListingParams } from "@/lib/event-filters";
+import { buildListingHref, listingParamsFromUrl, type ListingParams } from "@/lib/event-filters";
 
 type TabKey = "kesfet" | "harita" | "favoriler" | "hesap";
 
@@ -15,10 +15,9 @@ function useNavState(): { active: TabKey | null; params: ListingParams } {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  if (pathname === "/") {
-    const params = Object.fromEntries(searchParams.entries()) as ListingParams;
-    return { active: params.gorunum === "harita" ? "harita" : "kesfet", params };
-  }
+  // The home page or a category page: both are the listing.
+  const params = listingParamsFromUrl(pathname, searchParams);
+  if (params) return { active: params.gorunum === "harita" ? "harita" : "kesfet", params };
   if (pathname.startsWith("/etkinlik/")) return { active: "kesfet", params: {} };
   if (pathname === "/favoriler") return { active: "favoriler", params: {} };
   if (pathname === "/hesap" || pathname === "/giris" || pathname === "/kayit") {

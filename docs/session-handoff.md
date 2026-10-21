@@ -100,6 +100,17 @@ manuel giriş sadece ulaşılamayan etkinlikler için yedektir.
   ana sayfada `WebSite`. Hepsi `lib/event-seo.ts`'te ve test edildi. Bitmiş
   etkinlikler sitemap'te yok ve sayfaları `noindex` (link çalışmaya devam
   ediyor). Ana sayfanın H1'i "Diyarbakır etkinlikleri".
+- **Kategori sayfaları (2026-10-21)** — `/kategori/<slug>` (örn.
+  `/kategori/konser`), "diyarbakır konser" gibi aramalar için kendi başlığı,
+  açıklaması ve canonical'ı var (metinler `lib/category-pages.ts`). Liste
+  `components/EventListing.tsx`'te, ana sayfa ile ortak. `buildListingHref`
+  kategoriyi yola koyar; eski `/?kategori=` linkleri `middleware.ts`'te 308
+  ile yeni adrese gider (sayfa içinden `redirect()` yükleme ekranı yüzünden
+  200 + meta refresh'e düşüyordu). Yaklaşan etkinliği olan kategoriler
+  sitemap'te.
+- **Bilinen (yerel):** `next start` ile yerelde arama kutusu ve bazı
+  client-side geçişler takılıyor (RSC yanıtı tarayıcıda bitmiyor). Canlıdaki
+  kodla da aynısı oluyor, `next dev`'de ve Vercel'de sorun yok.
 - **Test + CI** — `npm test` (ağ/DB gerektirmez) ve her push'ta
   typecheck + lint + test + build çalıştıran `.github/workflows/ci.yml`.
 
