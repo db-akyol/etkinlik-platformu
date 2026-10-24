@@ -87,9 +87,34 @@ describe("eventJsonLd", () => {
     assert.equal(eventJsonLd({ ...EVENT, price: null }, "u").offers, undefined);
   });
 
-  test("includes a real end time but not one that isn't after the start", () => {
+  test("uses a real end time", () => {
     assert.equal(eventJsonLd({ ...EVENT, end_at: "2026-10-02T19:00:00.000Z" }, "u").endDate, "2026-10-02T22:00:00+03:00");
-    assert.equal(eventJsonLd({ ...EVENT, end_at: EVENT.start_at }, "u").endDate, undefined);
+  });
+
+  test("without a real end time, ends on the start day with no time made up", () => {
+    assert.equal(eventJsonLd({ ...EVENT, end_at: null }, "u").endDate, "2026-10-02");
+    assert.equal(eventJsonLd({ ...EVENT, end_at: EVENT.start_at }, "u").endDate, "2026-10-02");
+  });
+
+  test("names the company of a Devlet Tiyatroları listing as the performer", () => {
+    assert.deepEqual(ld.performer, [{ "@type": "PerformingGroup", name: "İstanbul Devlet Tiyatrosu" }]);
+  });
+
+  test("reads performers from a 'Sanatçılar:' description", () => {
+    const event = { ...EVENT, title: "Jurnal", description: "Sanatçılar: Bülent Emrah, Barış" };
+    assert.deepEqual(eventJsonLd(event, "u").performer, [
+      { "@type": "Person", name: "Bülent Emrah" },
+      { "@type": "Person", name: "Barış" },
+    ]);
+  });
+
+  test("reads the performer from an 'X Konseri' title", () => {
+    const event = { ...EVENT, title: "Rewşan Konseri", description: null };
+    assert.deepEqual(eventJsonLd(event, "u").performer, [{ "@type": "Person", name: "Rewşan" }]);
+  });
+
+  test("leaves the performer out when nothing names one", () => {
+    assert.equal(eventJsonLd({ ...EVENT, title: "Diyarbakır'da 3 Dev Eğlence", description: "Çocuk şenliği." }, "u").performer, undefined);
   });
 
   test("still has a location without a venue", () => {

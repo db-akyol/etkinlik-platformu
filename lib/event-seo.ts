@@ -88,12 +88,37 @@ function istanbulIsoWithOffset(iso: string): string {
   return `${local.toISOString().slice(0, 19)}+03:00`;
 }
 
+/**
+ * Who performs, from what the sources actually say: the touring company of a
+ * Devlet Tiyatroları listing (the title's suffix), bubilet's "Sanatçılar:
+ * A, B" description, or an "X Konseri" title. Nothing is guessed beyond
+ * those; with none of them the field is left out.
+ */
+function eventPerformers(event: SeoEvent): Performer[] {
+  const { title, subtitle } = splitEventTitle(event.title);
+  if (subtitle) return [{ "@type": "PerformingGroup", name: subtitle }];
+
+  const artists = event.description?.match(/^Sanatçılar:\s*(.+)$/mu)?.[1];
+  if (artists) {
+    return artists
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .map((name) => ({ "@type": "Person", name }));
+  }
+
+  const concert = title.match(/^(.+?)\s+Konseri$/iu)?.[1];
+  return concert ? [{ "@type": "Person", name: concert.trim() }] : [];
+}
+
+type Performer = { "@type": "Person" | "PerformingGroup"; name: string };
+
 export type EventJsonLd = {
   "@context": "https://schema.org";
   "@type": "Event";
   name: string;
   startDate: string;
-  endDate?: string;
+  endDate: string;
   eventStatus: string;
   eventAttendanceMode: string;
   location: {
@@ -105,14 +130,15 @@ export type EventJsonLd = {
   url: string;
   image?: string[];
   description?: string;
-  performer?: { "@type": "PerformingGroup"; name: string };
+  performer?: Performer[];
   offers?: { "@type": "Offer"; price: number; priceCurrency: "TRY"; url?: string };
 };
 
 /** schema.org Event for one event page; `pageUrl` is the page's absolute URL. */
 export function eventJsonLd(event: SeoEvent, pageUrl: string): EventJsonLd {
-  const { title, subtitle } = splitEventTitle(event.title);
+  const { title } = splitEventTitle(event.title);
   const endAt = realEndAt(event);
+  const performers = eventPerformers(event);
   const description = realDescription(event);
   const amount = parsePriceTL(event.price);
   const venue = event.venue;
@@ -122,7 +148,11 @@ export function eventJsonLd(event: SeoEvent, pageUrl: string): EventJsonLd {
     "@type": "Event",
     name: title,
     startDate: istanbulIsoWithOffset(event.start_at),
-    ...(endAt ? { endDate: istanbulIsoWithOffset(endAt) } : {}),
+    // Most sources give no end time. The start's Istanbul day alone ("ends
+    // that day") holds for nearly every listing — evening shows — without
+    // inventing a time; only a late show running past midnight is off, by a
+    // day boundary, never by a made-up hour.
+    endDate: endAt ? istanbulIsoWithOffset(endAt) : istanbulIsoWithOffset(event.start_at).slice(0, 10),
     eventStatus: "https://schema.org/EventScheduled",
     eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
     location: {
@@ -141,7 +171,7 @@ export function eventJsonLd(event: SeoEvent, pageUrl: string): EventJsonLd {
     url: pageUrl,
     ...(event.image_url ? { image: [event.image_url] } : {}),
     ...(description ? { description } : {}),
-    ...(subtitle ? { performer: { "@type": "PerformingGroup", name: subtitle } } : {}),
+    ...(performers.length > 0 ? { performer: performers } : {}),
     ...(amount != null
       ? {
           offers: {
