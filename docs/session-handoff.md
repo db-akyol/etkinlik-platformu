@@ -111,13 +111,16 @@ manuel giriş sadece ulaşılamayan etkinlikler için yedektir.
 - **Bu hafta sonu (2026-10-24)** — `/bu-hafta-sonu`: cuma–pazar
   (hafta sonu başladıysa bugünden pazara), gün gün. Üst menüde ve telefonda
   gün şeridinde linki var, sitemap'te.
-- **Amedspor (2026-10-24)** — `scripts/scrapers/amedspor-tff.ts` sıradaki 3
-  iç saha maçını tff.org'dan alır ("Spor" kategorisi, mekân Diyarbakır
-  Stadyumu). Satırlar TFF maç adresiyle eşleşir, saat değişince yerinde
-  güncellenir. 14 günden uzak maçların açıklamasında "saat kesinleşmemiş
-  olabilir" yazar (TFF uzak haftalara geçici saat koyuyor). Ana sayfada ve
-  `/kategori/spor`'da `components/AmedsporBanner.tsx` geri sayımlı bant
-  gösterir. Bilet linki Passo (`lib/amedspor.ts`'teki `PASSO_URL`, şimdilik
+- **Amedspor (2026-10-24)** — `scripts/scrapers/amedspor-tff.ts` sıradaki 4
+  maçı (iç saha + deplasman) tff.org'dan alır ve `matches` tablosuna yazar
+  (migration `0005_amedspor_matches.sql` — canlıya elle uygulanmalı).
+  Diyarbakır'daki iç saha maçları ayrıca "Spor" etkinliği olarak `events`'e
+  girer; deplasman maçları girmez. Satırlar TFF maç adresiyle eşleşir, saat
+  değişince yerinde güncellenir. 14 günden uzak maçlar "saat kesinleşmemiş"
+  olarak işaretlenir (TFF uzak haftalara geçici saat koyuyor). Ana sayfada ve
+  `/kategori/spor`'da `components/AmedsporBanner.tsx` sıradaki maçı geri
+  sayımla gösterir (başladıktan sonra 2 saat "Maç başladı"); bilet düğmesi
+  sadece iç saha maçlarında. Bilet linki Passo (`lib/amedspor.ts`'teki `PASSO_URL`, şimdilik
   ana sayfa; Amedspor'un Passo sayfası doğrulanınca oraya bağlanmalı).
   Passo Cloudflare arkasında, kazınmıyor.
 - **Bilinen (yerel):** `next start` ile yerelde arama kutusu ve bazı

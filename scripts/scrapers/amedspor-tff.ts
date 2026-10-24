@@ -1,6 +1,12 @@
 /**
- * amedspor-tff.ts — Amedspor's upcoming home matches, from the Turkish
- * Football Federation's own site (tff.org).
+ * amedspor-tff.ts — Amedspor's upcoming matches, from the Turkish Football
+ * Federation's own site (tff.org).
+ *
+ * Every upcoming match, home or away, goes to the `matches` table, which
+ * the match banner reads (components/AmedsporBanner.tsx). Home matches
+ * played in Diyarbakır are ALSO stored as events, since those are things
+ * to go to in the city; away matches never are (see
+ * supabase/migrations/0005_amedspor_matches.sql).
  *
  * Why TFF and not Passo, which sells the tickets: Passo sits behind a
  * Cloudflare bot challenge, and unlike bubilet (an events marketplace) it is
@@ -15,7 +21,7 @@
  *     score where upcoming ones show " - ";
  *   - each match page (pageID=29&macId=...) has the date and time once TFF
  *     has scheduled it (a few weeks ahead) and the stadium.
- * So one fixture request plus one per upcoming home match, capped at
+ * So one fixture request plus one per upcoming match, capped at
  * UPCOMING_LIMIT — a handful of requests, twice a day.
  *
  * Matches are matched to existing rows by their TFF page URL rather than
@@ -29,17 +35,17 @@ import { fileURLToPath } from "node:url";
 import { fetchWithRetry } from "./lib/fetch-retry";
 import { parseIstanbulLocalTime } from "./lib/normalize";
 import { getDiyarbakirCityId, resolveCategoryId, resolveVenueId } from "./lib/resolve-refs";
-import { getSupabaseAdmin, MissingSupabaseConfigError } from "./lib/supabase-admin";
+import { getSupabaseAdmin, MissingSupabaseConfigError, type SupabaseAdminClient } from "./lib/supabase-admin";
 import type { ScrapedEventInput, ScrapeRunResult } from "./lib/types";
 import { upsertScrapedEvent } from "./lib/upsert-event";
 
-const SOURCE_NAME = "tff.org (Amedspor iç saha)";
+const SOURCE_NAME = "tff.org (Amedspor maçları)";
 const BASE_URL = "https://www.tff.org";
 const FIXTURES_URL = `${BASE_URL}/default.aspx?pageID=198`;
 /** TFF's club id for Amed Sportif Faaliyetler (Amedspor). */
 const AMEDSPOR_CLUB_ID = "3678";
-/** How many upcoming home matches to look up each run. */
-const UPCOMING_LIMIT = 3;
+/** How many upcoming matches (home and away) to look up each run. */
+const UPCOMING_LIMIT = 4;
 const USER_AGENT =
   "Mozilla/5.0 (compatible; DiyarbakirEtkinlikBot/1.0; +https://diyarbakiretkinlik.vercel.app)";
 
@@ -63,16 +69,21 @@ function decodeEntities(text: string): string {
     .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
 }
 
+export type Fixture = { macId: string; played: boolean; isHome: boolean };
+
 /**
- * The club's home fixtures, in the fixture list's (week) order. A row is
- * "home team cell, score-or-dash cell linking to the match, away team cell".
+ * The club's fixtures, home and away, in the fixture list's (week) order. A
+ * row is "home team cell, score-or-dash cell linking to the match, away
+ * team cell".
  */
-export function parseHomeFixtures(html: string, clubId: string): { macId: string; played: boolean }[] {
+export function parseClubFixtures(html: string, clubId: string): Fixture[] {
   const row =
-    /kulupId=(\d+)">[^<]*<\/a><\/td>\s*<td[^>]*><a href="\/Default\.aspx\?pageID=29&macId=(\d+)">([^<]*)<\/a>/gi;
-  const fixtures: { macId: string; played: boolean }[] = [];
-  for (const [, homeId, macId, score] of html.matchAll(row)) {
-    if (homeId === clubId) fixtures.push({ macId, played: /\d/.test(score) });
+    /kulupId=(\d+)">[^<]*<\/a><\/td>\s*<td[^>]*><a href="\/Default\.aspx\?pageID=29&macId=(\d+)">([^<]*)<\/a><\/td>\s*<td[^>]*><a href="\/Default\.aspx\?pageID=28&kulupId=(\d+)">/gi;
+  const fixtures: Fixture[] = [];
+  for (const [, homeId, macId, score, awayId] of html.matchAll(row)) {
+    if (homeId === clubId || awayId === clubId) {
+      fixtures.push({ macId, played: /\d/.test(score), isHome: homeId === clubId });
+    }
   }
   return fixtures;
 }
@@ -130,6 +141,17 @@ function competitionName(raw: string): string {
   return raw.replace(/\s*\(.*\)\s*$/, "").replace(/\s+\S+\s+\S+\s+Sezonu$/u, "").trim() || "Lig";
 }
 
+/** "DİYARBAKIR STADYUMU - DİYARBAKIR - ..." → stadium and city, title-cased. */
+function stadiumAndCity(raw: string): { stadium: string | null; city: string | null } {
+  const [stadium, city] = raw.split(" - ").map((part) => part.trim());
+  // Some match pages give the stadium alone ("DİYARBAKIR STADYUMU").
+  const inferredCity = !city && /DİYARBAKIR/u.test(raw.toLocaleUpperCase("tr-TR")) ? "Diyarbakır" : null;
+  return {
+    stadium: stadium ? titleCaseTr(stadium) : null,
+    city: city ? titleCaseTr(city) : inferredCity,
+  };
+}
+
 /**
  * TFF sets exact kick-off times a few weeks ahead; further out, the time
  * on the match page is a placeholder. Past this horizon the description
@@ -137,14 +159,47 @@ function competitionName(raw: string): string {
  */
 const FIRM_SCHEDULE_DAYS = 14;
 
+function isTentative(startAt: string, now: Date): boolean {
+  return new Date(startAt).getTime() - now.getTime() > FIRM_SCHEDULE_DAYS * 86_400_000;
+}
+
+export type MatchRow = {
+  tff_mac_id: string;
+  home_team: string;
+  away_team: string;
+  is_home: boolean;
+  start_at: string;
+  stadium: string | null;
+  city: string | null;
+  competition: string;
+  tentative: boolean;
+  source_url: string;
+};
+
+/** A row for the `matches` table (the banner), home or away. */
+export function matchToRow(detail: MatchDetail, macId: string, isHome: boolean, now: Date = new Date()): MatchRow {
+  const startAt = parseIstanbulLocalTime(`${detail.startLocal}:00`);
+  return {
+    tff_mac_id: macId,
+    home_team: teamDisplayName(detail.home),
+    away_team: teamDisplayName(detail.away),
+    is_home: isHome,
+    start_at: startAt,
+    ...stadiumAndCity(detail.stadium),
+    competition: competitionName(detail.competition),
+    tentative: isTentative(startAt, now),
+    source_url: matchUrl(macId),
+  };
+}
+
 /** The event for a home match, or null if it isn't being played in Diyarbakır. */
 export function matchToEvent(detail: MatchDetail, macId: string, now: Date = new Date()): ScrapedEventInput | null {
   // A "home" match can be moved to a neutral ground; then it isn't a
   // Diyarbakır event.
   if (!detail.stadium.toLocaleUpperCase("tr-TR").includes("DİYARBAKIR")) return null;
-  const stadium = titleCaseTr(detail.stadium.split(" - ")[0]);
+  const stadium = stadiumAndCity(detail.stadium).stadium;
   const startAt = parseIstanbulLocalTime(`${detail.startLocal}:00`);
-  const tentative = new Date(startAt).getTime() - now.getTime() > FIRM_SCHEDULE_DAYS * 86_400_000;
+  const tentative = isTentative(startAt, now);
   return {
     title: `${teamDisplayName(detail.home)} – ${teamDisplayName(detail.away)}`,
     description:
@@ -162,37 +217,85 @@ export function matchToEvent(detail: MatchDetail, macId: string, now: Date = new
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function fetchAndParse(): Promise<ScrapedEventInput[]> {
-  const fixtures = parseHomeFixtures(await fetchTffPage(FIXTURES_URL), AMEDSPOR_CLUB_ID);
+type Parsed = {
+  events: ScrapedEventInput[];
+  rows: MatchRow[];
+  /** Matches TFF no longer has a date for (postponed): drop their banner rows. */
+  undated: string[];
+};
+
+async function fetchAndParse(): Promise<Parsed> {
+  const fixtures = parseClubFixtures(await fetchTffPage(FIXTURES_URL), AMEDSPOR_CLUB_ID);
   const upcoming = fixtures.filter((f) => !f.played).slice(0, UPCOMING_LIMIT);
   console.log(
-    `[${SOURCE_NAME}] ${fixtures.length} home fixture(s) this season, checking the next ${upcoming.length}.`,
+    `[${SOURCE_NAME}] ${fixtures.length} fixture(s) this season, checking the next ${upcoming.length}.`,
   );
 
-  const events: ScrapedEventInput[] = [];
-  for (const { macId } of upcoming) {
+  const parsed: Parsed = { events: [], rows: [], undated: [] };
+  for (const { macId, isHome } of upcoming) {
     // Polite pacing between pages — see docs/plan.md's scraping ethics note.
     await sleep(500);
     const detail = parseMatchDetail(await fetchTffPage(matchUrl(macId)));
     if (!detail) {
       console.log(`[${SOURCE_NAME}] match ${macId} has no date yet, skipping.`);
+      parsed.undated.push(macId);
       continue;
     }
+    parsed.rows.push(matchToRow(detail, macId, isHome));
+    if (!isHome) continue;
+
     const event = matchToEvent(detail, macId);
     if (!event) {
-      console.log(`[${SOURCE_NAME}] match ${macId} is at "${detail.stadium}", not in Diyarbakır, skipping.`);
+      console.log(`[${SOURCE_NAME}] home match ${macId} is at "${detail.stadium}", not in Diyarbakır: banner only.`);
       continue;
     }
-    if (new Date(event.start_at).getTime() < Date.now()) continue;
-    events.push(event);
+    if (new Date(event.start_at).getTime() >= Date.now()) parsed.events.push(event);
   }
-  return events;
+  return parsed;
+}
+
+/**
+ * Writes the banner's rows. A missing `matches` table (the migration not yet
+ * applied to this database) is a warning, not a failed run: the events still
+ * go in.
+ */
+async function saveMatches(supabase: SupabaseAdminClient, { rows, undated }: Parsed): Promise<number> {
+  if (rows.length > 0) {
+    const { error } = await supabase
+      .from("matches")
+      .upsert(
+        rows.map((row) => ({ ...row, updated_at: new Date().toISOString() })),
+        { onConflict: "tff_mac_id" },
+      );
+    if (error) {
+      if (error.code === "42P01" || error.code === "PGRST205") {
+        console.warn(
+          `[${SOURCE_NAME}] no "matches" table — apply supabase/migrations/0005_amedspor_matches.sql. Banner rows skipped.`,
+        );
+        return 0;
+      }
+      throw error;
+    }
+  }
+  if (undated.length > 0) {
+    const { error } = await supabase.from("matches").delete().in("tff_mac_id", undated);
+    if (error) console.warn(`[${SOURCE_NAME}] could not clear undated matches:`, error.message);
+  }
+  for (const row of rows) {
+    console.log(
+      `[${SOURCE_NAME}] banner: ${row.home_team} – ${row.away_team} @ ${row.start_at}${row.tentative ? " (tentative)" : ""}`,
+    );
+  }
+  return rows.length;
 }
 
 export async function run(): Promise<ScrapeRunResult> {
   console.log(`[${SOURCE_NAME}] fetching fixtures...`);
-  const items = await fetchAndParse();
-  console.log(`[${SOURCE_NAME}] parsed ${items.length} item(s).`);
+  const parsed = await fetchAndParse();
+  const items = parsed.events;
+  console.log(
+    `[${SOURCE_NAME}] parsed ${parsed.rows.length} match(es), ${items.length} of them Diyarbakır events.`,
+  );
 
   let supabase;
   let cityId: string;
@@ -202,12 +305,20 @@ export async function run(): Promise<ScrapeRunResult> {
   } catch (err) {
     if (!(err instanceof MissingSupabaseConfigError)) throw err;
     console.warn(`[${SOURCE_NAME}] Supabase not configured, skipping upsert:`, err.message);
-    for (const item of items) console.warn(`[${SOURCE_NAME}] would upsert: "${item.title}" @ ${item.start_at}`);
-    return { source: SOURCE_NAME, found: items.length, upserted: 0, errors: 0 };
+    for (const row of parsed.rows) {
+      console.warn(`[${SOURCE_NAME}] would save: ${row.home_team} – ${row.away_team} @ ${row.start_at}`);
+    }
+    return { source: SOURCE_NAME, found: parsed.rows.length, upserted: 0, errors: 0 };
   }
 
   let upserted = 0;
   let errors = 0;
+  try {
+    upserted += await saveMatches(supabase, parsed);
+  } catch (err) {
+    errors++;
+    console.error(`[${SOURCE_NAME}] saving banner matches FAILED:`, err);
+  }
   for (const item of items) {
     try {
       const [venueId, categoryId] = await Promise.all([
@@ -261,7 +372,8 @@ export async function run(): Promise<ScrapeRunResult> {
     }
   }
 
-  const summary: ScrapeRunResult = { source: SOURCE_NAME, found: items.length, upserted, errors };
+  // "found" counts matches (home and away); "upserted" banner rows plus events.
+  const summary: ScrapeRunResult = { source: SOURCE_NAME, found: parsed.rows.length, upserted, errors };
   console.log(
     `[${SOURCE_NAME}] done. found=${summary.found} upserted=${summary.upserted} errors=${summary.errors}`,
   );

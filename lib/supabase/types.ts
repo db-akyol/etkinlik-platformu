@@ -65,6 +65,22 @@ export interface Favorite {
   created_at: string;
 }
 
+/** Amedspor's upcoming matches for the banner; see migration 0005. */
+export interface Match {
+  id: string;
+  tff_mac_id: string;
+  home_team: string;
+  away_team: string;
+  is_home: boolean;
+  start_at: string;
+  stadium: string | null;
+  city: string | null;
+  competition: string | null;
+  tentative: boolean;
+  source_url: string;
+  updated_at: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -94,6 +110,11 @@ export interface Database {
         Row: Favorite;
         Insert: Partial<Favorite>;
         Update: Partial<Favorite>;
+      };
+      matches: {
+        Row: Match;
+        Insert: Partial<Match>;
+        Update: Partial<Match>;
       };
     };
   };

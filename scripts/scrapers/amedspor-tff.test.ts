@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import test, { describe } from "node:test";
 
-import { matchToEvent, parseHomeFixtures, parseMatchDetail, teamDisplayName } from "./amedspor-tff";
+import { matchToEvent, matchToRow, parseClubFixtures, parseMatchDetail, teamDisplayName } from "./amedspor-tff";
 
 const FIXTURE_ROWS = `
 <tr> <td class="altCizgi" style="font-size:9px;"><a href="/Default.aspx?pageID=28&kulupId=3678">AMED SPORTİF FAALİYETLER</a></td> <td align="Justify" class="altCizgi" nowrap="nowrap" style="font-size:9px;"><a href="/Default.aspx?pageID=29&macId=317850">1 - 0</a></td> <td align="Right" style="font-size:9px;" class="altCizgi"><a href="/Default.aspx?pageID=28&kulupId=3600">TÜMOSAN KONYASPOR</a></td> </tr>
@@ -22,11 +22,12 @@ const MATCH_PAGE = `
 <span id="ctl00_MPane_m_29_194_ctnr_m_29_194_MacBilgiDisplay1_dtMacBilgisi_lblOrganizasyonAdi">Trendyol Süper Lig Adnan Süvari Sezonu (Profesyonel Takım) <br/></span>
 `;
 
-describe("parseHomeFixtures", () => {
-  test("finds the club's home matches and tells played from upcoming", () => {
-    assert.deepEqual(parseHomeFixtures(FIXTURE_ROWS, "3678"), [
-      { macId: "317850", played: true },
-      { macId: "317868", played: false },
+describe("parseClubFixtures", () => {
+  test("finds the club's home and away matches, in order, played or not", () => {
+    assert.deepEqual(parseClubFixtures(FIXTURE_ROWS, "3678"), [
+      { macId: "317850", played: true, isHome: true },
+      { macId: "317860", played: false, isHome: false },
+      { macId: "317868", played: false, isHome: true },
     ]);
   });
 });
@@ -86,5 +87,41 @@ describe("matchToEvent", () => {
   test("skips a home match moved away from Diyarbakır", () => {
     const detail = { ...parseMatchDetail(MATCH_PAGE)!, stadium: "MARDİN 2 EYLÜL STADYUMU - MARDİN" };
     assert.equal(matchToEvent(detail, "317868"), null);
+  });
+});
+
+describe("matchToRow", () => {
+  const now = new Date("2026-10-24T12:00:00Z");
+
+  test("a home match, for the banner", () => {
+    const detail = parseMatchDetail(MATCH_PAGE)!;
+    assert.deepEqual(matchToRow(detail, "317868", true, now), {
+      tff_mac_id: "317868",
+      home_team: "Amedspor",
+      away_team: "Eyüpspor",
+      is_home: true,
+      start_at: "2026-11-01T10:30:00.000Z",
+      stadium: "Diyarbakır Stadyumu",
+      city: "Diyarbakır",
+      competition: "Trendyol Süper Lig",
+      tentative: false,
+      source_url: "https://www.tff.org/Default.aspx?pageID=29&macId=317868",
+    });
+  });
+
+  test("an away match keeps TFF's home-away order and the host city", () => {
+    const detail = {
+      startLocal: "2026-10-24T19:00",
+      stadium: "SAMSUN YENİ 19 MAYIS STADYUMU - SAMSUN - SAMSUN MERKEZ",
+      home: "SAMSUNSPOR A.Ş.",
+      away: "AMED SPORTİF FAALİYETLER",
+      competition: "Trendyol Süper Lig Adnan Süvari Sezonu (Profesyonel Takım)",
+    };
+    const row = matchToRow(detail, "317860", false, now);
+    assert.equal(row.home_team, "Samsunspor");
+    assert.equal(row.away_team, "Amedspor");
+    assert.equal(row.is_home, false);
+    assert.equal(row.stadium, "Samsun Yeni 19 Mayıs Stadyumu");
+    assert.equal(row.city, "Samsun");
   });
 });
