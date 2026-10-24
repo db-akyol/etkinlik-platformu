@@ -108,6 +108,13 @@ describe("eventJsonLd", () => {
     ]);
   });
 
+  test("skips bubilet's 'Sanatçı' placeholder and falls back to the title", () => {
+    const placeholder = { ...EVENT, title: "Dj Feyza Irmak Konseri", description: "Sanatçılar: Sanatçı" };
+    assert.deepEqual(eventJsonLd(placeholder, "u").performer, [{ "@type": "Person", name: "Dj Feyza Irmak" }]);
+    const nothingElse = { ...EVENT, title: "Çocuk Sirki", description: "Sanatçılar: Sanatçı" };
+    assert.equal(eventJsonLd(nothingElse, "u").performer, undefined);
+  });
+
   test("reads the performer from an 'X Konseri' title", () => {
     const event = { ...EVENT, title: "Rewşan Konseri", description: null };
     assert.deepEqual(eventJsonLd(event, "u").performer, [{ "@type": "Person", name: "Rewşan" }]);

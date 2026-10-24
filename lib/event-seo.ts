@@ -98,14 +98,13 @@ function eventPerformers(event: SeoEvent): Performer[] {
   const { title, subtitle } = splitEventTitle(event.title);
   if (subtitle) return [{ "@type": "PerformingGroup", name: subtitle }];
 
-  const artists = event.description?.match(/^Sanatçılar:\s*(.+)$/mu)?.[1];
-  if (artists) {
-    return artists
-      .split(",")
-      .map((name) => name.trim())
-      .filter(Boolean)
-      .map((name) => ({ "@type": "Person", name }));
-  }
+  // bubilet writes "Sanatçılar: Sanatçı" when it has no names: a
+  // placeholder, not a performer called "Sanatçı".
+  const artists = (event.description?.match(/^Sanatçılar:\s*(.+)$/mu)?.[1] ?? "")
+    .split(",")
+    .map((name) => name.trim())
+    .filter((name) => name && !/^sanatçı(lar)?$/iu.test(name));
+  if (artists.length > 0) return artists.map((name) => ({ "@type": "Person", name }));
 
   const concert = title.match(/^(.+?)\s+Konseri$/iu)?.[1];
   return concert ? [{ "@type": "Person", name: concert.trim() }] : [];
