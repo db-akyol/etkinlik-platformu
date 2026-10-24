@@ -149,3 +149,18 @@ export function matchesPriceFilter(price: string | null, fiyat: string | undefin
   }
   return true;
 }
+
+/**
+ * The days the "bu hafta sonu" page covers, as Istanbul day keys: Friday to
+ * Sunday — a Friday evening show is part of weekend plans. Monday to
+ * Thursday that is the coming weekend; during the weekend it starts today,
+ * so days already over drop off.
+ */
+export function weekendRange(todayKey: string): { from: string; to: string } {
+  // getUTCDay() of a day key read at noon UTC: 0 is Sunday, 5 is Friday.
+  const weekday = new Date(`${todayKey}T12:00:00Z`).getUTCDay();
+  const daysToSunday = (7 - weekday) % 7;
+  const to = addCalendarDays(todayKey, daysToSunday);
+  const friday = addCalendarDays(to, -2);
+  return { from: friday > todayKey ? friday : todayKey, to };
+}

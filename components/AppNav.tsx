@@ -5,7 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { CompassIcon, HeartIcon, MapPinIcon, UserIcon } from "@/components/icons";
 import { buildListingHref, listingParamsFromUrl, type ListingParams } from "@/lib/event-filters";
 
-type TabKey = "kesfet" | "harita" | "favoriler" | "hesap";
+type TabKey = "kesfet" | "haftasonu" | "harita" | "favoriler" | "hesap";
 
 /**
  * Which section the current URL belongs to. Harita is the listing with
@@ -19,6 +19,7 @@ function useNavState(): { active: TabKey | null; params: ListingParams } {
   const params = listingParamsFromUrl(pathname, searchParams);
   if (params) return { active: params.gorunum === "harita" ? "harita" : "kesfet", params };
   if (pathname.startsWith("/etkinlik/")) return { active: "kesfet", params: {} };
+  if (pathname === "/bu-hafta-sonu") return { active: "haftasonu", params: {} };
   if (pathname === "/favoriler") return { active: "favoriler", params: {} };
   if (pathname === "/hesap" || pathname === "/giris" || pathname === "/kayit") {
     return { active: "hesap", params: {} };
@@ -39,6 +40,7 @@ export function TopNav() {
   const hrefs = listingHrefs(params);
   const items: { key: TabKey; href: string; label: string }[] = [
     { key: "kesfet", href: hrefs.kesfet, label: "Keşfet" },
+    { key: "haftasonu", href: "/bu-hafta-sonu", label: "Hafta sonu" },
     { key: "harita", href: hrefs.harita, label: "Harita" },
     { key: "favoriler", href: "/favoriler", label: "Favorilerim" },
   ];

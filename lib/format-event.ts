@@ -119,7 +119,7 @@ function addDays(dayKey: string, days: number): string {
 }
 
 /** "25 – 27 Eylül" or "28 Eylül – 4 Ekim". */
-function formatDayRange(from: string, to: string): string {
+export function formatDayRange(from: string, to: string): string {
   const sameMonth = from.slice(0, 7) === to.slice(0, 7);
   const start = formatDayKey(from, sameMonth ? { day: "numeric" } : { day: "numeric", month: "long" });
   return `${start} – ${formatDayKey(to, { day: "numeric", month: "long" })}`;

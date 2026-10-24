@@ -48,6 +48,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     return entries;
   }
 
+  entries.push({
+    url: `${base}/bu-hafta-sonu`,
+    lastModified: new Date(),
+    changeFrequency: "daily",
+    priority: 0.9,
+  });
+
   // One page per category that has something coming up — an empty category
   // page is nothing worth sending a crawler to.
   const categorySlugs = [...new Set((data ?? []).flatMap((event) => (event.category ? [event.category.slug] : [])))];

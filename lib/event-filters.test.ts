@@ -14,6 +14,7 @@ import {
   getUpcomingFloor,
   isFreePrice,
   listingParamsFromUrl,
+  weekendRange,
   matchesPriceFilter,
   parseDayParam,
   parsePriceTL,
@@ -183,5 +184,23 @@ describe("matchesPriceFilter", () => {
   test("no filter or an unknown value keeps everything", () => {
     assert.equal(matchesPriceFilter("1.000 TL", undefined), true);
     assert.equal(matchesPriceFilter("1.000 TL", "bedava"), true);
+  });
+});
+
+describe("weekendRange", () => {
+  // 2026-10-19 is a Monday.
+  test("Monday to Thursday: the coming Friday to Sunday", () => {
+    assert.deepEqual(weekendRange("2026-10-19"), { from: "2026-10-23", to: "2026-10-25" });
+    assert.deepEqual(weekendRange("2026-10-22"), { from: "2026-10-23", to: "2026-10-25" });
+  });
+
+  test("during the weekend: from today to Sunday", () => {
+    assert.deepEqual(weekendRange("2026-10-23"), { from: "2026-10-23", to: "2026-10-25" });
+    assert.deepEqual(weekendRange("2026-10-24"), { from: "2026-10-24", to: "2026-10-25" });
+    assert.deepEqual(weekendRange("2026-10-25"), { from: "2026-10-25", to: "2026-10-25" });
+  });
+
+  test("crosses a month boundary", () => {
+    assert.deepEqual(weekendRange("2026-10-27"), { from: "2026-10-30", to: "2026-11-01" });
   });
 });

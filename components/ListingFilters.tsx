@@ -112,6 +112,11 @@ export function DateStrip({
         <span className="text-[11px] opacity-80">Tüm</span>
         <span className="font-display text-sm leading-none font-extrabold">günler</span>
       </Link>
+      {/* Its own page rather than a filter: see app/(public)/bu-hafta-sonu. */}
+      <Link href="/bu-hafta-sonu" className={`${cellClass} border-line bg-surface`}>
+        <span className="text-[11px] opacity-80">Hafta</span>
+        <span className="font-display text-sm leading-none font-extrabold">sonu</span>
+      </Link>
       {days.map((key, i) => {
         const chip = formatDayChip(key);
         const label = i === 0 ? "Bugün" : chip.weekday;
