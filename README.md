@@ -20,7 +20,7 @@ npm run dev                 # http://localhost:3000
 ```
 
 Siteyi çalıştırmak için bu kadarı yeter. Sadece `npm run scrape` çalıştıracaksanız
-ek olarak Python 3.11+ gerekir — dört kaynaktan biri (bubilet) Cloudflare
+ek olarak Python 3.11+ gerekir — kaynaklardan biri (bubilet) Cloudflare
 doğrulaması yüzünden bir Python alt sürecine ihtiyaç duyuyor (bkz. "Dikkat"):
 
 ```bash
@@ -36,7 +36,7 @@ pip install -r scripts/scrapers/requirements.txt
 | `npm test` | Birim testleri (ağ ve veritabanı gerektirmez, ~0.5 sn) |
 | `npm run typecheck` | Route tiplerini üretir (`next typegen`), sonra `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm run scrape` | Dört scraper'ı da çalıştırır ve `.env.local`'deki veritabanına yazar |
+| `npm run scrape` | Tüm scraper'ları çalıştırır ve `.env.local`'deki veritabanına yazar |
 
 ## Proje yapısı
 

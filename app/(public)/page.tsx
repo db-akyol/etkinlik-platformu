@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { permanentRedirect } from "next/navigation";
+import AmedsporBanner from "@/components/AmedsporBanner";
 import EventListing, { parseListingParams, type SearchParams } from "@/components/EventListing";
 import { buildListingHref } from "@/lib/event-filters";
 import { serializeJsonLd } from "@/lib/event-seo";
@@ -51,6 +52,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<Sea
       />
       <EventListing
         params={params}
+        // Only on the plain listing: a search or a picked day is a narrower
+        // question than "what's on".
+        banner={!params.q && !params.gun && !params.fiyat ? <AmedsporBanner /> : undefined}
         heading="Diyarbakır etkinlikleri"
         intro="Diyarbakır'daki konser, tiyatro, stand-up ve çocuk etkinlikleri tek yerde. Liste Biletinial, Biletix, Bubilet ve Büyükşehir Belediyesi'nden günde iki kez güncellenir."
       />

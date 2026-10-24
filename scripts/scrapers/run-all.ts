@@ -25,6 +25,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { run as runBiletinial } from "./biletinial";
+import { run as runAmedsporTff } from "./amedspor-tff";
 import { run as runBiletix } from "./biletix";
 import { run as runBubilet } from "./bubilet";
 import { run as runDiyarbakirBelediye } from "./diyarbakir-belediye";
@@ -63,6 +64,9 @@ const PARSERS: RegisteredParser[] = [
   // set well below that so an ordinarily-quiet Spor/Atölye day doesn't trip
   // this, but a Cloudflare-bypass or page-structure break still does.
   { run: runBubilet, minExpected: 10 },
+  // Zero: between seasons, and in weeks where TFF hasn't dated the next
+  // home match yet, nothing upcoming is a correct result.
+  { run: runAmedsporTff, minExpected: 0 },
 ];
 
 /**

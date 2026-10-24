@@ -60,8 +60,11 @@ export default async function EventListing({
   params,
   heading,
   intro,
+  banner,
 }: {
   params: ListingParams;
+  /** Shown above the heading, e.g. the Amedspor match banner. */
+  banner?: React.ReactNode;
   /** The H1 when no single day is selected. */
   heading: string;
   /** One sentence under the heading, shown on the unfiltered view. */
@@ -232,6 +235,7 @@ export default async function EventListing({
         <div className="min-w-0 pb-10">
           <DateStrip todayKey={todayKey} eventDays={eventDays} params={params} />
           <FilterChips categories={categoryOptions} totalCount={groupsOnDay.length} params={params} />
+          {banner && <div className="pt-3 md:pt-0">{banner}</div>}
 
           <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 pt-2 md:pt-0">
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">

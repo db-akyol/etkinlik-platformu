@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import AmedsporBanner from "@/components/AmedsporBanner";
 import EventListing, { parseListingParams, type SearchParams } from "@/components/EventListing";
 import { categoryPageCopy } from "@/lib/category-pages";
 import { createClient } from "@/lib/supabase/server";
@@ -71,6 +72,7 @@ export default async function CategoryPage({
   return (
     <EventListing
       params={{ ...parseListingParams(await searchParams), kategori: category.slug }}
+      banner={category.slug === "spor" ? <AmedsporBanner /> : undefined}
       heading={copy.heading}
       intro={copy.description}
     />

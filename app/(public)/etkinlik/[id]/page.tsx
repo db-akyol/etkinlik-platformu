@@ -16,6 +16,7 @@ import {
   istanbulDayKey,
   splitEventTitle,
 } from "@/lib/format-event";
+import { PASSO_URL, TFF_MATCH_URL_PREFIX } from "@/lib/amedspor";
 import { getSiteUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 import type { EventRow } from "@/lib/supabase/types";
@@ -182,6 +183,7 @@ export default async function EventDetailPage({
   // Sources without a real description often repeat the title there.
   const description = event.description?.trim() !== event.title.trim() ? event.description : null;
   const sourceHost = event.source_type === "scraped" ? hostnameOf(event.source_url) : null;
+  const isTffMatch = event.source_url?.startsWith(TFF_MATCH_URL_PREFIX) ?? false;
   const price = formatEventPrice(event.price);
 
   return (
@@ -263,14 +265,30 @@ export default async function EventDetailPage({
           </dl>
 
           <div className="flex flex-wrap items-center gap-3">
+            {isTffMatch && (
+              // TFF lists the match but doesn't sell tickets; Passo does.
+              <a
+                href={PASSO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-full bg-dicle px-5 py-2.5 font-semibold text-on-dicle transition-colors hover:bg-dicle-dim"
+              >
+                Bilet al: Passo
+                <ExternalIcon size={16} />
+              </a>
+            )}
             {sourceHost && (
               <a
                 href={event.source_url!}
                 target="_blank"
                 rel="noopener noreferrer nofollow"
-                className="inline-flex items-center gap-2 rounded-full bg-dicle px-5 py-2.5 font-semibold text-on-dicle transition-colors hover:bg-dicle-dim"
+                className={
+                  isTffMatch
+                    ? "inline-flex items-center gap-2 rounded-full border border-line-strong bg-surface px-5 py-2.5 font-semibold transition-colors hover:bg-surface-muted"
+                    : "inline-flex items-center gap-2 rounded-full bg-dicle px-5 py-2.5 font-semibold text-on-dicle transition-colors hover:bg-dicle-dim"
+                }
               >
-                Bilet ve ayrıntılar: {sourceHost}
+                {isTffMatch ? "Maç bilgisi" : "Bilet ve ayrıntılar"}: {sourceHost}
                 <ExternalIcon size={16} />
               </a>
             )}

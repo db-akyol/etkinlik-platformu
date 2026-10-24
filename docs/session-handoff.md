@@ -108,6 +108,18 @@ manuel giriş sadece ulaşılamayan etkinlikler için yedektir.
   ile yeni adrese gider (sayfa içinden `redirect()` yükleme ekranı yüzünden
   200 + meta refresh'e düşüyordu). Yaklaşan etkinliği olan kategoriler
   sitemap'te.
+- **Bu hafta sonu (2026-10-24)** — `/bu-hafta-sonu`: cuma–pazar
+  (hafta sonu başladıysa bugünden pazara), gün gün. Üst menüde ve telefonda
+  gün şeridinde linki var, sitemap'te.
+- **Amedspor (2026-10-24)** — `scripts/scrapers/amedspor-tff.ts` sıradaki 3
+  iç saha maçını tff.org'dan alır ("Spor" kategorisi, mekân Diyarbakır
+  Stadyumu). Satırlar TFF maç adresiyle eşleşir, saat değişince yerinde
+  güncellenir. 14 günden uzak maçların açıklamasında "saat kesinleşmemiş
+  olabilir" yazar (TFF uzak haftalara geçici saat koyuyor). Ana sayfada ve
+  `/kategori/spor`'da `components/AmedsporBanner.tsx` geri sayımlı bant
+  gösterir. Bilet linki Passo (`lib/amedspor.ts`'teki `PASSO_URL`, şimdilik
+  ana sayfa; Amedspor'un Passo sayfası doğrulanınca oraya bağlanmalı).
+  Passo Cloudflare arkasında, kazınmıyor.
 - **Bilinen (yerel):** `next start` ile yerelde arama kutusu ve bazı
   client-side geçişler takılıyor (RSC yanıtı tarayıcıda bitmiyor). Canlıdaki
   kodla da aynısı oluyor, `next dev`'de ve Vercel'de sorun yok.
