@@ -6,7 +6,14 @@
 import assert from "node:assert/strict";
 import test, { describe } from "node:test";
 
-import { matchToEvent, matchToRow, parseClubFixtures, parseMatchDetail, teamDisplayName } from "./amedspor-tff";
+import {
+  isStaleAfterFailure,
+  matchToEvent,
+  matchToRow,
+  parseClubFixtures,
+  parseMatchDetail,
+  teamDisplayName,
+} from "./amedspor-tff";
 
 const FIXTURE_ROWS = `
 <tr> <td class="altCizgi" style="font-size:9px;"><a href="/Default.aspx?pageID=28&kulupId=3678">AMED SPORTİF FAALİYETLER</a></td> <td align="Justify" class="altCizgi" nowrap="nowrap" style="font-size:9px;"><a href="/Default.aspx?pageID=29&macId=317850">1 - 0</a></td> <td align="Right" style="font-size:9px;" class="altCizgi"><a href="/Default.aspx?pageID=28&kulupId=3600">TÜMOSAN KONYASPOR</a></td> </tr>
@@ -123,5 +130,21 @@ describe("matchToRow", () => {
     assert.equal(row.is_home, false);
     assert.equal(row.stadium, "Samsun Yeni 19 Mayıs Stadyumu");
     assert.equal(row.city, "Samsun");
+  });
+});
+
+describe("isStaleAfterFailure", () => {
+  const now = new Date("2026-11-27T12:00:00Z");
+
+  test("a failed read with data refreshed a day ago is not an error", () => {
+    assert.equal(isStaleAfterFailure("2026-11-26T12:00:00Z", now), false);
+  });
+
+  test("a failed read with data older than three days is an error", () => {
+    assert.equal(isStaleAfterFailure("2026-11-23T11:00:00Z", now), true);
+  });
+
+  test("a failed read with no data at all is an error", () => {
+    assert.equal(isStaleAfterFailure(null, now), true);
   });
 });

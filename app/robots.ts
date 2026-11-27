@@ -22,7 +22,13 @@ export default function robots(): MetadataRoute.Robots {
         // it saves them the redirect. The rest have nothing to index:
         // /favoriler needs a session, /giris and /kayit are bare forms, and
         // /offline is the service worker's fallback page.
-        disallow: ["/admin", "/favoriler", "/giris", "/kayit", "/offline"],
+        //
+        // "/*?" keeps crawlers off every filtered view (?gun=, ?fiyat=,
+        // ?gorunum=, ?q=). Each canonicalises to its unfiltered page, but the
+        // calendar × price × map combinations are endless: by November 2026
+        // Google had crawled 146 of them ("duplicate without user-selected
+        // canonical"), time it didn't spend on event pages.
+        disallow: ["/admin", "/favoriler", "/giris", "/kayit", "/offline", "/*?"],
       },
     ],
     sitemap: `${base}/sitemap.xml`,

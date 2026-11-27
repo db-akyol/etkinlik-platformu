@@ -217,6 +217,21 @@ export function matchToEvent(detail: MatchDetail, macId: string, now: Date = new
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** How long the banner's data may go without a successful TFF read before a failed run is an error. */
+const STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * Whether a failed TFF read should fail the run: only once the stored
+ * matches are older than STALE_AFTER_MS (or there are none). tff.org
+ * answered 403 for a day in November 2026 and then recovered; a red run and
+ * an email for that is noise, but a source that stays down must still turn
+ * the run red.
+ */
+export function isStaleAfterFailure(lastUpdatedAt: string | null, now: Date = new Date()): boolean {
+  if (!lastUpdatedAt) return true;
+  return now.getTime() - new Date(lastUpdatedAt).getTime() > STALE_AFTER_MS;
+}
+
 type Parsed = {
   events: ScrapedEventInput[];
   rows: MatchRow[];
@@ -289,9 +304,42 @@ async function saveMatches(supabase: SupabaseAdminClient, { rows, undated }: Par
   return rows.length;
 }
 
+/** A failed TFF read: a warning while the banner's data is recent, an error once it's stale. */
+async function handleFetchFailure(err: unknown): Promise<ScrapeRunResult> {
+  const reason = err instanceof Error ? err.message : String(err);
+  // Without a database there's nothing to judge staleness by: fail as before.
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("matches")
+    .select("updated_at")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ updated_at: string }>();
+  if (error) throw err;
+
+  const lastUpdatedAt = data?.updated_at ?? null;
+  if (!isStaleAfterFailure(lastUpdatedAt)) {
+    console.warn(
+      `[${SOURCE_NAME}] tff.org unreachable this run (${reason}). Match data last refreshed ${lastUpdatedAt}, ` +
+        "recent enough — not failing the run.",
+    );
+    return { source: SOURCE_NAME, found: 0, upserted: 0, errors: 0 };
+  }
+  console.error(
+    `[${SOURCE_NAME}] tff.org unreachable (${reason}) and match data is stale ` +
+      `(last refreshed ${lastUpdatedAt ?? "never"}).`,
+  );
+  return { source: SOURCE_NAME, found: 0, upserted: 0, errors: 1 };
+}
+
 export async function run(): Promise<ScrapeRunResult> {
   console.log(`[${SOURCE_NAME}] fetching fixtures...`);
-  const parsed = await fetchAndParse();
+  let parsed: Parsed;
+  try {
+    parsed = await fetchAndParse();
+  } catch (err) {
+    return handleFetchFailure(err);
+  }
   const items = parsed.events;
   console.log(
     `[${SOURCE_NAME}] parsed ${parsed.rows.length} match(es), ${items.length} of them Diyarbakır events.`,
